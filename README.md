@@ -47,7 +47,7 @@ lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes cla
 | status_t | almost all calls to lmdbpp class methods return a status_t object. ok() method returns true() if the operation succeeded, while nok() returns true if the operation failed. error() method returns the error code provided ty LMDB, while message() returns an std::string with the appropriate error message |
 
 The following LMDB features are not yet implemented by lmdbpp wrapper:
-* Duplicate keys - All keys in a key/pair value are unique
+* No duplicate keys - all keys in a key/pair value are unique
 * No nested transactions
 
 ### lmdb++ project files
