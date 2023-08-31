@@ -82,3 +82,21 @@ lmdbpp classes and methods are tested using Catch2 unit test framework. You can 
 * Do not use LMDB databases on remote filesystems, even between processes on the same host. This breaks flock() advisory locs on some OSes, possibly memory map suunc, and certainly sync between programs on different hosts.
 * Opening a database can fail if another process is opening or closing it at exact same time
 
+## Acknowledgement
+
+### Author
+Howard Chu, Symas Corporation.
+
+### Copyright
+LMDB source code Copyright 2011-2015 Howard Chu, Symas Corp. All rights reserved.
+Redistribution and use in source and binary forms, with or without modification, are permitted only as authorized by the OpenLDAP Public License.
+
+A copy of this license is available in the file LICENSE in the top-level directory of the distribution or, alternatively, at http://www.OpenLDAP.org/license.html.
+
+### Derived from:
+LMDB code is derived from btree.c written by Martin Hedenfalk. 
+Copyright (c) 2009, 2010 Martin Hedenfalk martin@bzero.se
+
+Permission to use, copy, modify, and distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. 
