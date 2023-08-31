@@ -61,6 +61,32 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 | midl.h | header file used internally by lmdb C source code |
 | midl.c | C source code used internally by lmdb |
 
+### lmdb::environment_t class
+
+lmdbpp lmdb::environment_t class wraps all the LMDB environment operations. lmdb::environment_t provents copying, but a move constructor and operator is provided. Please note that only one environment should be created per process, to avoid issues with some OSses advisory locking. 
+
+#### constructor
+
+#### startup
+
+#### cleanup
+
+#### check
+
+#### flush
+
+#### path
+
+#### max_readers
+
+####  max_tables
+
+#### mmap_size
+
+#### max_keysize
+
+#### handle
+
 ### License
 
 lmdbpp is licensed with the same license as LMDB, The OpenLDAP Public License. A copy of this license is available in the file LICENSE in the top-level directory of the distribution or, alternatively, at http://www.OpenLDAP.org/license.html. Please also refer to Acknowledgement section below.
