@@ -131,7 +131,7 @@ int main()
 }
 ```
 
-#### cleanup
+#### cleanup() method
 Close the environment and release the memory map.
 
 ```C++
@@ -142,10 +142,50 @@ void cleanup();
 
 Only a single thread may call this function. All transactions, databases, and cursors must already be closed before calling this function. Attempts to use any such handles after calling this function will cause a SIGSEGV. The environment handle will be freed and must not be used again after this call. cleanup() is called automatically by lmdb::environment_t class to close the environment and release resources if a call to cleanup() was not made at the time the object is being destroyed.
 
-#### check
+#### check() method
+Check for stale entries in the reader lock table. check() returns the number of stale readers checked and cleared.
 
-#### flush
+```C++
+#include "lmdbpp.h"
 
+int check();
+```
+#### flush() method
+Flush the data buffers to disk. 
+
+```C++
+#include "lmdbpp.h"
+
+status_t flush();
+```
+Data is always written to disk when a transaction is commited, but the operating system may keep it buffered. LMDB always flushes the OS buffers upon commit as well. 
+
+Example:
+```C++
+#include "lmdbpp.h"
+#include <iostream>
+
+lmdb::environment_t env;
+
+void show_error(const char* method, const lmdb::status_t& status) noexcept
+{
+   std::cout << method << " failed with error " status.error() << ": " << status.message() << "\n";
+}   
+
+int main()
+{
+   lmdb::status_t status = env.startup(".\\");
+   if (status.ok())
+   {
+        if (status = env.flush(); status.nok()) show_error("flush()", status);
+   }
+   else
+   {
+      show_error("startup()", status);
+   }
+   env.cleanup();
+}
+```
 #### path
 
 #### max_readers
