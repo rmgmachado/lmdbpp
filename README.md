@@ -50,3 +50,17 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 * Duplicate keys - All keys in a key/pair value are unique
 * No nested transactions
 
+## Caveats using LMDB
+
+* A broken lock file can cause sync issues. Stale reader transactions left behind by an aborted program cause further writes to grow the database quickly, and stale locks can block further operations. To fix this issue check for stale readers periodically using environment_t::check() method.
+* Only the database file owner should normally use the database on BSD systems.
+* A thread can only use one transaction at a time. Please see LMDB documentation for more details
+* Use environment_t in the process which started it, without fork()ing
+* Do not open a LMDB database twice in the same process. It breaks flock() advisory locking.
+* Avoid long-lived transactions. Read transactions prevent reuse of pages freeed by newer write transactions, thus the database can grow quickly. Write transactions prevent other write transactions, since writes are serialized.
+* Avoid suspending a process with active transactions. These would then be "long-lived" as aboce.
+* Avoid aborting a process with an active transaction. These would be "long-lived" as above until an environment_t::check() is called for cleanup stale readers.
+* Close the environment once in a while, so the lockfile can get reset.
+* Do not use LMDB databases on remote filesystems, even between processes on the same host. This breaks flock() advisory locs on some OSes, possibly memory map suunc, and certainly sync between programs on different hosts.
+* Opening a database can fail if another process is opening or closing it at exact same time
+
