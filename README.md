@@ -50,6 +50,23 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 * Duplicate keys - All keys in a key/pair value are unique
 * No nested transactions
 
+### lmdb++ project files
+
+| File | Description |
+| lmdbpp.h | C++ wrapper for LMDB API |
+| lmdbpp-test.cpp | Catch2 unit test for lmdbpp code |
+| lmdb.h | lmdb header file |
+| mdb.c | lmdb C source code |
+| midl.h | header file used internally by lmdb C source code |
+| midl.c | C source code used internally by lmdb |
+
+### Dependency on Catch2 for Unit Tests
+
+lmdbpp classes and methods are tested using Catch2 unit test framework. You can download Catch2 on Github using the following link: 
+[Catch2 v2.x][Catch2]
+
+[Catch2]: https://github.com/catchorg/Catch2/tree/v2.x/single_include
+
 ## Caveats using LMDB
 
 * A broken lock file can cause sync issues. Stale reader transactions left behind by an aborted program cause further writes to grow the database quickly, and stale locks can block further operations. To fix this issue check for stale readers periodically using environment_t::check() method.
