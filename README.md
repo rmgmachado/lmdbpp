@@ -42,9 +42,9 @@ lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes cla
 |--|--|
 | environment_t  | Everything start with an environment, created by call to startup() method. Each process should have only one environment to prevent issues with locking. lmdb::environment_t class provided cleanup() method to terminate and cleanup an environment. |
 | transaction_t | Once an environment is created, a transaction can be created. Every LMDB operation needs to be performed under a read_write or read_only transaction. begin() method starts a transaction, commit() commits any changes, while abort() reverts any changes |
-| table_t | |
-| cursor_t | |
-| status_t | |
+| table_t | After a transaction is started with a call to transaction_t::begin(), a new table can be created, or an existing table can be opened. operations such as get(), put() and del() can be performed with table_t object |
+| cursor_t | After a table is opened, a cursor_t object can be created to perform cursor operations such as first(), last(), next(), prior(), seek(), search() and find() |
+| status_t | almost all calls to lmdbpp class methods return a status_t object. ok() method returns true() if the operation succeeded, while nok() returns true if the operation failed. error() method returns the error code provided ty LMDB, while message() returns an std::string with the appropriate error message |
 
 The following LMDB features are not yet implemented by lmdbpp wrapper:
 * Duplicate keys - All keys in a key/pair value are unique
