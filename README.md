@@ -34,7 +34,7 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 * Nested transactions
 * Batched writes
 
-## lmdbpp C++ wrapper project
+## lmdbpp C++ wrapper
 
 lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes classes under the namespace lmdb representing the major LMDB objects, with an additional class status_t provided to handle errors returned by LMDB:
 
