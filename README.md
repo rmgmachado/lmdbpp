@@ -50,6 +50,7 @@ lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes cla
 The following LMDB features are not yet implemented by lmdbpp wrapper:
 * No duplicate keys - all keys in a key/pair value are unique
 * No nested transactions
+* No batched writes
 
 ### lmdbpp project files
 
