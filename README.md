@@ -78,14 +78,11 @@ lmdb::environment_t env;
 #### startup() method
 Create or open a new LMDB environment. When the enviroment_t object is no longer needed, you must call cleanup() method to close the environment and release resources.
 
-##### Syntax
 ```C++
 #include "lmdbpp.h"
 
 status_t startup(const std::string& path, unsigned int max_tables = DEFAULT_MAXTABLES, size_t mmap_size = DEFAULT_MMAPSIZE, unsigned int max_readers = DEFAULT_MAXREADERS);
 ```
-
-#### parameters
 
 | Parameter | In/Out | Description |
 |----|:--:|----|
