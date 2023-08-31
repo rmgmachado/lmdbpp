@@ -40,7 +40,11 @@ lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes cla
 
 | class | Description |
 |--|--|
-|  |  |
+| environment_t  |  |
+| transaction_t | |
+| table_t | |
+| cursor_t | |
+| status_t | |
 
 The following LMDB features are not yet implemented by lmdbpp wrapper:
 * Duplicate keys - All keys in a key/pair value are unique
