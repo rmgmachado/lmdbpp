@@ -6,3 +6,14 @@ LMDB is a Btree-based database management library modeled loosely on the Berkele
 The library is fully thread-aware and supports concurrent read/write access from multiple processes and threads. Data pages use a copy-on- write strategy so no active data pages are ever overwritten, which also provides resistance to corruption and eliminates the need of any special recovery procedures after a system crash. Writes are fully serialized; only one write transaction may be active at a time, which guarantees that writers can never deadlock. The database structure is multi-versioned so readers run with no locks; writers cannot block readers, and readers don't block writers.
 
 Unlike other well-known database mechanisms which use either write-ahead transaction logs or append-only data writes, LMDB requires no maintenance during operation. Both write-ahead loggers and append-only databases require periodic checkpointing and/or compaction of their log or database files otherwise they grow without bound. LMDB tracks free pages within the database and re-uses them for new write operations, so the database size does not grow without bound in normal use.
+
+[LMDB source code can be found here][lmdb source]
+[LMDB documentation][lmdb doc]
+[LMDB Getting Started][lmdb guide]
+[LMDB API Reference][lmdb reference]
+
+[lmdb source]: https://github.com/LMDB/lmdb
+[lmdb doc]: http://www.lmdb.tech/doc/index.html
+[lmdb guide]: http://www.lmdb.tech/doc/starting.html
+[lmdb reference]: http://www.lmdb.tech/doc/group__mdb.html
+
