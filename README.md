@@ -121,6 +121,7 @@ int main()
    {
       std::cout << "startup() failed with error " << status.message() << "\n";
    }
+   env.cleanup();
 }
 ```
 
