@@ -81,6 +81,8 @@ Create or open a new LMDB environment. When the enviroment_t object is no longer
 ##### Syntax
 ```C++
 #include "lmdbpp.h"
+
+status_t startup(const std::string& path, unsigned int max_tables = DEFAULT_MAXTABLES, size_t mmap_size = DEFAULT_MMAPSIZE, unsigned int max_readers = DEFAULT_MAXREADERS);
 ```
 
 #### parameters
@@ -91,9 +93,6 @@ Create or open a new LMDB environment. When the enviroment_t object is no longer
 | max_tables | In | |
 | mmap_size | In | |
 | max_readers | In | |
-
-status_t startup(const std::string& path, unsigned int max_tables = DEFAULT_MAXTABLES, size_t mmap_size = DEFAULT_MMAPSIZE, unsigned int max_readers = DEFAULT_MAXREADERS);
-```
 
 The default values used by startup() parameters:
 ```C++
