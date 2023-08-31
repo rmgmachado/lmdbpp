@@ -121,7 +121,7 @@ int main()
    lmdb::status_t status = env.startup(".\\");
    if (status.ok())
    {
-        // create transaction, table and perhaps cursors
+        // create transaction, tables and perhaps cursors
    }
    else
    {
