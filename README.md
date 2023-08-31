@@ -111,9 +111,9 @@ Example:
 
 lmdb::environment_t env;
 
-void show_error(const lmdb::status_t& status) noexcept
+void show_error(const char* method, const lmdb::status_t& status) noexcept
 {
-   std::cout << "startup() failed with error " status.error() << ": " << status.message() << "\n";
+   std::cout << method << " failed with error " status.error() << ": " << status.message() << "\n";
 }   
 
 int main()
@@ -125,7 +125,7 @@ int main()
    }
    else
    {
-      show_error(status);
+      show_error("startup()", status);
    }
    env.cleanup();
 }
