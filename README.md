@@ -66,6 +66,13 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 lmdbpp lmdb::environment_t class wraps all the LMDB environment operations. lmdb::environment_t provents copying, but a move constructor and operator is provided. Please note that only one environment should be created per process, to avoid issues with some OSses advisory locking. 
 
 #### constructor
+lmdb::environment_t class declares only a default constructor. Please note copy constructor and assignment operator have both been deleted, as this object cannot be copied. On the other hand a move constructor and a move operator has been provided to transfer ownership to another lmdb::environment_t object. Example:
+
+<samp>
+#include <lmdbpp.h>;
+
+lmdb::environment_t env;
+<samp>
 
 #### startup
 
