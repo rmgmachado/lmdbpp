@@ -70,7 +70,7 @@ lmdb::environment_t class declares only a default constructor. Please note copy 
 
 <samp>
 #include "lmdbpp.h"
-<n></n>
+<br/>
 lmdb::environment_t env;
 </samp>
 
