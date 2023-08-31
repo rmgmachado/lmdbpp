@@ -1,5 +1,5 @@
 # lmdbpp
-C++ warpper for Symas LMDB key/value pair database
+C++ warpper for Symas LMDB key/value pair database.
 
 LMDB is a B+tree-based database management library modeled loosely on the BerkeleyDB API, but much simplified. The entire database is exposed in a memory map, and all data fetches return data directly from the mapped memory, so no malloc's or memcpy's occur during data fetches. As such, the library is extremely simple because it requires no page caching layer of its own, and it is extremely high performance and memory-efficient. It is also fully transactional with full ACID semantics, and when the memory map is read-only, the database integrity cannot be corrupted by stray pointer writes from application code.
 
@@ -55,7 +55,7 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 
 | File | Description |
 |--|--|
-| lmdbpp.h | wrapper for LMDB API |
+| lmdbpp.h | C++ wrapper for LMDB API |
 | lmdbpp-test.cpp | Catch2 unit test for lmdbpp code |
 | lmdb.h | lmdb header file |
 | mdb.c | lmdb C source code |
@@ -132,6 +132,15 @@ int main()
 ```
 
 #### cleanup
+Close the environment and release the memory map.
+
+```C++
+#include "lmdbpp.h"
+
+void cleanup();
+```
+
+Only a single thread may call this function. All transactions, databases, and cursors must already be closed before calling this function. Attempts to use any such handles after calling this function will cause a SIGSEGV. The environment handle will be freed and must not be used again after this call. cleanup() is called automatically by lmdb::environment_t class to close the environment and release resources if a call to cleanup() was not made at the time the object is being destroyed.
 
 #### check
 
