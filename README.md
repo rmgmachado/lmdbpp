@@ -41,7 +41,7 @@ lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes cla
 | class | Description |
 |--|--|
 | environment_t  | Everything start with an environment, created by call to startup() method. Each process should have only one environment to prevent issues with locking. lmdb::environment_t class provided cleanup() method to terminate and cleanup an environment. |
-| transaction_t | |
+| transaction_t | Once an environment is created, a transaction can be created. Every LMDB operation needs to be performed under a read_write or read_only transaction. begin() method starts a transaction, commit() commits any changes, while abort() reverts any changes |
 | table_t | |
 | cursor_t | |
 | status_t | |
