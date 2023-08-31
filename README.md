@@ -14,3 +14,23 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 [lmdb guide]: http://www.lmdb.tech/doc/starting.html
 [lmdb reference]: http://www.lmdb.tech/doc/group__mdb.html
 
+## LMDB Major Features
+
+* Key/Value store using B+trees
+* Fully transactional, ACID compliant
+* MVCC, readers never block
+* Uses memory-mapped files, needs no tuning
+* Crash-proff, no recovery needed after restart
+* Highly optimized, extremely compact - C code under 40kb object code
+* Runs on most modern OSs = Linux, Android, MacOSX, *BSD, Windows, etc
+
+### Concurrency Support
+
+* Both multi-process and multi-thread
+* Single Writer + N Readers
+   * Writers don't block readers
+   * Readers don't block writers
+   * Reads scale perfectly linearly with available CPU cores
+* Nested transactions
+* Batched writes
+
