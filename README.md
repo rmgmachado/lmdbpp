@@ -146,7 +146,7 @@ lmdbpp classes and methods are tested using Catch2 unit test framework. You can 
 * Do not use LMDB databases on remote filesystems, even between processes on the same host. This breaks flock() advisory locs on some OSes, possibly memory map suunc, and certainly sync between programs on different hosts.
 * Opening a database can fail if another process is opening or closing it at exact same time
 
-## Acknowledgement
+## LMDB Acknowledgement
 
 ### Author
 Howard Chu, Symas Corporation.
