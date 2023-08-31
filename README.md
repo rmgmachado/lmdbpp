@@ -46,6 +46,7 @@ lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes cla
 | cursor_t | After a table is opened, a cursor_t object can be created to perform cursor operations such as first(), last(), next(), prior(), seek(), search() and find(), put() and del() |
 | status_t | almost all calls to lmdbpp class methods return a status_t object. ok() method returns true() if the operation succeeded, while nok() returns true if the operation failed. error() method returns the error code provided ty LMDB, while message() returns an std::string with the appropriate error message |
 
+### lmdbpp limitations
 The following LMDB features are not yet implemented by lmdbpp wrapper:
 * No duplicate keys - all keys in a key/pair value are unique
 * No nested transactions
@@ -66,7 +67,7 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 lmdbpp lmdb::environment_t class wraps all the LMDB environment operations. lmdb::environment_t provents copying, but a move constructor and operator is provided. Please note that only one environment should be created per process, to avoid issues with some OSses advisory locking. 
 
 #### constructor
-lmdb::environment_t class declares only a default constructor. Please note copy constructor and assignment operator have both been deleted, as this object cannot be copied. On the other hand a move constructor and a move operator has been provided to transfer ownership to another lmdb::environment_t object. Example:
+lmdb::environment_t class declares only a default constructor. Please note copy constructor and assignment operator have both been deleted, as this object cannot be copied. On the other hand, a move constructor and a move operator has been provided to transfer ownership to another lmdb::environment_t object. Example:
 
 ```C++
 #include "lmdbpp.h"
@@ -75,6 +76,15 @@ lmdb::environment_t env;
 ```
 
 #### startup
+Create or open a new LMDB environment. When the enviroment_t object is no longer needed, you must call cleanup() method to close the environment and release resources.
+
+```C++
+constexpr unsigned int DEFAULT_MAXTABLES = 128;
+constexpr unsigned int DEFAULT_MAXREADERS = 128;
+constexpr size_t DEFAULT_MMAPSIZE = UINT32_MAX;
+
+status_t startup(const std::string& path, unsigned int max_tables = DEFAULT_MAXTABLES, size_t mmap_size = DEFAULT_MMAPSIZE, unsigned int max_readers = DEFAULT_MAXREADERS);
+```
 
 #### cleanup
 
