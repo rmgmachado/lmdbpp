@@ -22,7 +22,7 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 * Uses memory-mapped files, needs no tuning
 * Crash-proof, no recovery needed after restart
 * Highly optimized, extremely compact - C code under 40kb object code
-* Runs on most modern OSs = Linux, Android, MacOSX, *BSD, Windows, etc
+* Runs on most modern OSs - Linux, Android, MacOSX, *BSD, Windows, etc
 
 ### Concurrency Support
 
