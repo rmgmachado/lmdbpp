@@ -186,7 +186,14 @@ int main()
    env.cleanup();
 }
 ```
-#### path
+#### path() method
+Return the path that was used at the startup() call.
+```C++
+#include "lmdbpp.h"
+
+std::string path();
+```
+If path() is called before a successful startup() call, an empty string is returned.
 
 #### max_readers
 
