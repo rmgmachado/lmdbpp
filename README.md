@@ -67,8 +67,9 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 lmdbpp lmdb::environment_t class wraps all the LMDB environment operations. lmdb::environment_t provents copying, but a move constructor and operator is provided. Please note that only one environment should be created per process, to avoid issues with some OSses advisory locking. 
 
 #### constructor
-lmdb::environment_t class declares only a default constructor. Please note copy constructor and assignment operator have both been deleted, as this object cannot be copied. On the other hand, a move constructor and a move operator has been provided to transfer ownership to another lmdb::environment_t object. Example:
+lmdb::environment_t class declares only a default constructor. Please note copy constructor and assignment operator have both been deleted, as this object cannot be copied. On the other hand, a move constructor and a move operator has been provided to transfer ownership to another lmdb::environment_t object. lmdb::environment_t automatically invokes cleanup() to close the environment and release resources.
 
+Example:
 ```C++
 #include "lmdbpp.h"
 
@@ -76,7 +77,7 @@ lmdb::environment_t env;
 ```
 
 #### startup() method
-Create or open a new LMDB environment. When the enviroment_t object is no longer needed, you must call cleanup() to close the environment and release resources.
+Create or open a new LMDB environment. When the enviroment_t object is no longer needed, call to cleanup() to close the environment and release resources. The lmdb::environment_t destructor calls cleanup() automatically if the environment is still open when the object is destroyed.
 
 ```C++
 #include "lmdbpp.h"
@@ -110,6 +111,11 @@ Example:
 
 lmdb::environment_t env;
 
+void show_error(const lmdb::status_t& status) noexcept
+{
+   std::cout << "startup() failed with error " status.error() << ": " << status.message() << "\n";
+}   
+
 int main()
 {
    lmdb::status_t status = env.startup(".\\");
@@ -119,7 +125,7 @@ int main()
    }
    else
    {
-      std::cout << "startup() failed with error " status.error() << ": " << status.message() << "\n";
+      show_error(status);
    }
    env.cleanup();
 }
