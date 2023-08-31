@@ -102,6 +102,27 @@ constexpr unsigned int DEFAULT_MAXTABLES = 128;
 constexpr unsigned int DEFAULT_MAXREADERS = 126;
 constexpr size_t DEFAULT_MMAPSIZE = 10485760;
 ```
+Example:
+
+```C++
+#include "lmdbpp.h"
+#include <iostream>
+
+lmdb::environment_t env;
+
+int main()
+{
+   lmdb::status_t status = env.startup(".\\");
+   if (status.ok())
+   {
+        // create transaction, table and perhaps cursors
+   }
+   else
+   {
+      std::cout << "startup() failed with error " << status.message() << "\n";
+   }
+}
+```
 
 #### cleanup
 
