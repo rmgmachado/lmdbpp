@@ -39,11 +39,11 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes classes classes representing the major LMDB objects, with an additional class status_t provided to handle errors returned by LMDB:
 
 <table>
-  <td>
-    | lmdb::environment_t | Everything start with an environment, created by call to startup() method. Each process should have only one environment to prevent issues with locking. lmdb::environment_t class provided cleanup() method to terminate and cleanup an environment. |
+  <tr><td>
+    | class | Description |
+    | lmdb::environment_t | Everything start with an environment, created by call to startup() method. Each process should have only one environment to prevent issues with locking. lmdb::environment_t class provided cleanup() method to terminate and cleanup an environment. |    
     | lmdb::transaction_t | Once an environment is created, a transaction can be created. Every LMDB operation needs to be performed under a read_write or read_only transaction. begin() method starts a transaction, commit() commits any changes, while abort() reverts any changes |
-  </td>
-</table>
+  </td></tr>tr></table>
 
 The following LMDB features are not yet implemented by lmdbpp wrapper:
 * Duplicate keys - All keys in a key/pair value are unique
