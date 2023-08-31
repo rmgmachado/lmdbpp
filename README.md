@@ -76,7 +76,7 @@ lmdb::environment_t env;
 ```
 
 #### startup() method
-Create or open a new LMDB environment. When the enviroment_t object is no longer needed, you must call cleanup() method to close the environment and release resources.
+Create or open a new LMDB environment. When the enviroment_t object is no longer needed, you must call cleanup() to close the environment and release resources.
 
 ```C++
 #include "lmdbpp.h"
@@ -119,7 +119,7 @@ int main()
    }
    else
    {
-      std::cout << "startup() failed with error " << status.message() << "\n";
+      std::cout << "startup() failed with error " status.error() << ": " << status.message() << "\n";
    }
    env.cleanup();
 }
