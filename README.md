@@ -89,16 +89,18 @@ status_t startup(const std::string& path, unsigned int max_tables = DEFAULT_MAXT
 
 | Parameter | In/Out | Description |
 |----|:--:|----|
-| path | In | |
-| max_tables | In | |
-| mmap_size | In | |
-| max_readers | In | |
+| path | In | The directory in which the database files reside. This directory must already exist and be writable. |
+| max_tables | In | Maximum number of tables in a database |
+| mmap_size | In | Set the size of the memory map to use for this environment. The size should be a multiple of the OS page size. The default is 10,485,760 bytes. Any attempt to set a size smaller than the space already consumed by the environment will be silently changed to the current size of the used space.  |
+| max_readers | In | Set the maximum number of threads/reader slots for the environment. This defines the number of slots in the lock table that is used to track readers in the the environment. The default is 126. Starting a read-only transaction normally ties a lock table slot to the current thread until the environment closes or the thread exits. |
+
+Parameter mmap_size is also the maximum size of the database. The value should be chosen as large as possible, to accommodate future growth of the database. The new size takes effect immediately for the current process but will not be persisted to any others until a write transaction has been committed by the current process. If the mapsize is increased by another process, and data has grown beyond the range of the current mapsize, transaction_t::begin() will return MDB_MAP_RESIZED error, in which case environment_t::mmap_size() method may be called with a size of zero to adopt the new size.
 
 The default values used by startup() parameters:
 ```C++
 constexpr unsigned int DEFAULT_MAXTABLES = 128;
 constexpr unsigned int DEFAULT_MAXREADERS = 128;
-constexpr size_t DEFAULT_MMAPSIZE = UINT32_MAX;
+constexpr size_t DEFAULT_MMAPSIZE = 10485760;
 ```
 
 #### cleanup
