@@ -75,7 +75,7 @@ lmdb::environment_t class declares only a default constructor. Please note copy 
 lmdb::environment_t env;
 ```
 
-#### startup
+#### startup() method
 Create or open a new LMDB environment. When the enviroment_t object is no longer needed, you must call cleanup() method to close the environment and release resources.
 
 ##### Syntax
