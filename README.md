@@ -50,7 +50,7 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 * No duplicate keys - all keys in a key/pair value are unique
 * No nested transactions
 
-### lmdb++ project files
+### lmdbpp project files
 
 | File | Description |
 |--|--|
@@ -60,6 +60,10 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 | mdb.c | lmdb C source code |
 | midl.h | header file used internally by lmdb C source code |
 | midl.c | C source code used internally by lmdb |
+
+### License
+
+lmdbpp is licensed with the same license as LMDB, The OpenLDAP Public License. A copy of this license is available in the file LICENSE in the top-level directory of the distribution or, alternatively, at http://www.OpenLDAP.org/license.html. Please also refer to Acknowledgement section below.
 
 ### Dependency on Catch2 for Unit Tests
 
