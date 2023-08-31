@@ -53,6 +53,7 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 ### lmdb++ project files
 
 | File | Description |
+|--|--|
 | lmdbpp.h | wrapper for LMDB API |
 | lmdbpp-test.cpp | Catch2 unit test for lmdbpp code |
 | lmdb.h | lmdb header file |
