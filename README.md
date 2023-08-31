@@ -36,11 +36,11 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 
 ## lmdbpp C++ wrapper project
 
-lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes classes classes representing the major LMDB objects, with an additional class status_t provided to handle errors returned by LMDB:
+lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes classes under the namespace lmdb representing the major LMDB objects, with an additional class status_t provided to handle errors returned by LMDB:
 
 | class | Description |
 |--|--|
-| environment_t  |  |
+| environment_t  | Everything start with an environment, created by call to startup() method. Each process should have only one environment to prevent issues with locking. lmdb::environment_t class provided cleanup() method to terminate and cleanup an environment. |
 | transaction_t | |
 | table_t | |
 | cursor_t | |
