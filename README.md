@@ -68,11 +68,11 @@ lmdbpp lmdb::environment_t class wraps all the LMDB environment operations. lmdb
 #### constructor
 lmdb::environment_t class declares only a default constructor. Please note copy constructor and assignment operator have both been deleted, as this object cannot be copied. On the other hand a move constructor and a move operator has been provided to transfer ownership to another lmdb::environment_t object. Example:
 
-<table><tr><td><samp>
+```C++
 #include "lmdbpp.h"
 <br><br>
 lmdb::environment_t env;
-</samp></td></tr></table>
+```
 
 #### startup
 
