@@ -99,7 +99,7 @@ Parameter mmap_size is also the maximum size of the database. The value should b
 The default values used by startup() parameters:
 ```C++
 constexpr unsigned int DEFAULT_MAXTABLES = 128;
-constexpr unsigned int DEFAULT_MAXREADERS = 128;
+constexpr unsigned int DEFAULT_MAXREADERS = 126;
 constexpr size_t DEFAULT_MMAPSIZE = 10485760;
 ```
 
