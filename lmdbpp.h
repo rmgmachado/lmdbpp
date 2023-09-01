@@ -44,8 +44,8 @@
 namespace lmdb {
 
    constexpr unsigned int DEFAULT_MAXTABLES = 128;
-   constexpr unsigned int DEFAULT_MAXREADERS = 128;
-   constexpr size_t DEFAULT_MMAPSIZE = UINT32_MAX;
+   constexpr unsigned int DEFAULT_MAXREADERS = 126;
+   constexpr size_t DEFAULT_MMAPSIZE = 10485760;
 
    enum class transaction_type_t { read_write, read_only };
 
@@ -98,7 +98,7 @@ namespace lmdb {
       MDB_env* envptr_{ nullptr };
       size_t max_tables_{ 0 };
       size_t mmap_size_{ 0 };
-      
+
    public:
       environment_t() = default;
       environment_t(const environment_t&) = delete;
@@ -133,7 +133,7 @@ namespace lmdb {
          return *this;
       }
 
-      status_t startup(const std::string& path, unsigned int max_tables = DEFAULT_MAXTABLES, size_t mmap_size = DEFAULT_MMAPSIZE, unsigned int max_readers = DEFAULT_MAXREADERS)
+      status_t startup(const std::string& path, unsigned int max_tables = DEFAULT_MAXTABLES, size_t mmap_size = DEFAULT_MMAPSIZE, unsigned int max_readers = DEFAULT_MAXREADERS) noexcept
       {
          status_t status;
          if (status = mdb_env_create(&envptr_); status.nok()) return status;
@@ -195,6 +195,11 @@ namespace lmdb {
       size_t mmap_size() const noexcept
       {
          return mmap_size_;
+      }
+
+      size_t mmap_size(size_t sz) noexcept
+      {
+         if (status = mdb_env_set_mapsize(envptr_, sz); status.nok()) return status;
       }
 
       size_t max_keysize() const noexcept
