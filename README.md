@@ -47,8 +47,8 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 * Relies on the OS/filesystem cache - no wasted memory in app-level caching
 * Can store live pointer-bases objects directly
 
-### LMDB Performance
-<img src="https://github.com/rmgmachado/lmdbpp/blob/main/graphs/lmdb-read-performance-sr.png" width="600" height="300" border="10"/>
+### LMDB Performance <sub>MDB</sub>
+<img src="https://github.com/rmgmachado/lmdbpp/blob/main/graphs/lmdb-read-performance-sr.png" width="700" height="300" border="10"/>
 
 ## lmdbpp C++ wrapper
 
