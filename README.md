@@ -14,7 +14,7 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 [lmdb guide]: http://www.lmdb.tech/doc/starting.html
 [lmdb reference]: http://www.lmdb.tech/doc/group__mdb.html
 
-## LMDB Major Features
+## LMDB Features
 
 * Key/Value store using B+trees
 * Fully transactional, ACID compliant
