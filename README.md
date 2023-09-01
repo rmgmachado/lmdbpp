@@ -48,7 +48,7 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 * Can store live pointer-bases objects directly
 
 ### LMDB Performance
-<img src="https://github.com/rmgmachado/lmdbpp/blob/main/graphs/lmdb-read-performance-sr.png" width="300" height="300" border="10"/>
+<img src="https://github.com/rmgmachado/lmdbpp/blob/main/graphs/lmdb-read-performance-sr.png" width="300" height="600" border="10"/>
 
 ## lmdbpp C++ wrapper
 
