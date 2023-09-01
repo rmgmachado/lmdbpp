@@ -47,6 +47,9 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 * Relies on the OS/filesystem cache - no wasted memory in app-level caching
 * Can store live pointer-bases objects directly
 
+### LMDB Performance
+<img src="./graphs/lmdb-read-performance-lr.png" width="100" height="100" border="10"/>
+
 ## lmdbpp C++ wrapper
 
 lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes classes under the namespace lmdb representing the major LMDB objects, with an additional class status_t provided to handle errors returned by LMDB:
