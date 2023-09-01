@@ -209,15 +209,15 @@ std::string path();
 ```
 If path() is called before a successful startup() call, an empty string is returned.
 
-#### max_readers
+#### max_readers() method
 
-####  max_tables
+####  max_tables() method
 
-#### mmap_size
+#### mmap_size() method
 
-#### max_keysize
+#### max_keysize() method
 
-#### handle
+#### handle() method
 
 ### License
 
