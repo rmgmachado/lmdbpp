@@ -34,6 +34,19 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 * Nested transactions
 * Batched writes
 
+### Uses Copy-on-Write
+* Live data is never overwritten
+* Database structure cannot be corrupted by incomplete operations (system crashes)
+* No write-ahead logs needed
+* No transaction log cleanup/maintenance
+* No recovery needed after crashes
+
+### Uses Single-Level_Store
+* Reads are satisfied directly from the memory map - no malloc or memcpy overhead
+* Writes can be performanced directly to the memory map - no write buffers, no buffer tuning
+* Relies on the OS/filesystem cache - no wasted memory in app-level caching
+* Can store live pointer-bases objects directly
+
 ## lmdbpp C++ wrapper
 
 lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes classes under the namespace lmdb representing the major LMDB objects, with an additional class status_t provided to handle errors returned by LMDB:
