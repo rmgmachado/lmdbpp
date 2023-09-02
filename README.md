@@ -7,6 +7,10 @@ The library is fully thread-aware and supports concurrent read/write access from
 
 Unlike other well-known database mechanisms which use either write-ahead transaction logs or append-only data writes, LMDB requires no maintenance during operation. Both write-ahead loggers and append-only databases require periodic checkpointing and/or compaction of their log or database files otherwise they grow without bound. LMDB tracks free pages within the database and re-uses them for new write operations, so the database size does not grow without bound in normal use.
 
+LMDB is part of the [openLDAP Project][openldap].
+
+[openldap]: https://www.openldap.org/
+
 References: [LMDB source code Github][lmdb source], [LMDB documentation link][lmdb doc], [LMDB Getting Started Guide][lmdb guide], [LMDB API Reference][lmdb reference]
 
 [lmdb source]: https://github.com/LMDB/lmdb
