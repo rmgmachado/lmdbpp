@@ -301,7 +301,7 @@ mdbpp lmdb::transaction_t class wraps all the LMDB transaction operations. lmdb:
 
 To actually get anything done, a transaction must be committed using transaction_t::commit(). Alternatively, all of a transaction's operations can be discarded using transaction_t::abort().
 
-In a read-only transaction, any cursors will not automatically be freed. In a read-write transaction, all cursors will be freed and must not be used again. For read-only transactions, obviously there is nothing to commit to storage. The transaction still must eventually be aborted to close any database handle(s) opened in it, or committed to keep the database handles around for reuse in new transactions. In addition, as long as a transaction is open, a consistent view of the database is kept alive, which requires storage. A read-only transaction that no longer requires this consistent view should be terminated (committed or aborted) when the view is no longer needed.
+For read-only transactions, obviously there is nothing to commit to storage. The transaction still must eventually be aborted to close any database handle(s) opened in it, or committed to keep the database handles around for reuse in new transactions. In addition, as long as a transaction is open, a consistent view of the database is kept alive, which requires storage. A read-only transaction that no longer requires this consistent view should be terminated (committed or aborted) when the view is no longer needed.
 
 There can be multiple simultaneously active read-only transactions but only one that can write. Once a single read-write transaction is opened, all further attempts to begin one will block until the first one is committed or aborted. This has no effect on read-only transactions, however, and they may continue to be opened at any time.
 
@@ -329,7 +329,7 @@ transaction_t::begin() accepts one argument specifying the transaction type"
 * transaction_type_t::read_only - begin a read only transaction
 * transaction_type_t::read_write - begin a read write transaction
 
-If transaction_type_t::none is passed as parameter for transaction_t::begin() status_t returns an MDB_INVALID_TRANSACTION_TYPE error.
+If transaction_type_t::none is passed as parameter for transaction_t::begin() status_t returns a **MDB_INVALID_TRANSACTION_TYPE** error.
 
 Example:
 
@@ -358,6 +358,63 @@ int main()
    }
    env.cleanup();
 }
+```
+
+#### transaction_t::commit() method
+Commit any changes to data occurred after a transaction started with transaction_t::begin().
+
+```C++
+#include "lmdbpph.h"
+
+status_t commit() noexcept;
+```
+
+#### transaction_t::abort() method
+Discard any changes to data occurred after a transaction started with transaction_t::begin();
+
+```C++
+#include "lmdbpph.h"
+
+status_t abort() noexcept;
+```
+
+#### transaction_t::started() method
+Indicate if a transaction is active, i.e. was started with a call to begin().
+
+```C++
+#include "lmdbpph.h"
+
+bool started() const noexcept;
+```
+
+#### transaction_t::type() method
+Return the transaction type of the transaction object.
+
+```C++
+#include "lmdbpph.h"
+
+transaction_type_t type() const noexcept;
+```
+The possible return types are:
+* transaction_type_t::read_only - transaction is active and it's a read only transaction
+* transaction_type_t::read_write - transaction is active and it's a read write transaction
+* transaction_type_t::none - transaction is not active
+
+#### transaction_t::handle() method
+Return the LMDB environment handle pointer.
+```C++
+#include "lmdbpp.h"
+
+MDB_env* handle() noexcept;
+```
+The LMDB environment pointer is needed when instanciating transaction_t and table_t objects.
+
+#### transaction_t::environment() method
+Return the environment object associated with this transaction.
+```C++
+#include "lmdbpp.h"
+
+environment_t& environment() noexcept;
 ```
 
 ### lmdb::table_t class
