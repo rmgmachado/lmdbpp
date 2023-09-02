@@ -292,7 +292,7 @@ MDB_env* handle() noexcept;
 The LMDB environment pointer is needed when instanciating transaction_t and table_t objects.
 
 ### lmdb::transaction_t class
-mdbpp lmdb::transaction_t class wraps all the LMDB transaction operations. lmdb::transaction_t prevents copying, but a move constructor and move operator are provided to transfer ownwership of a transaction handle. Transactions may be read-write or read-only. A transaction must only be used by one thread at a time. Transactions are always required, even for read-only access. The transaction provides a consistent view of the data. 
+mdbpp lmdb::transaction_t class wraps all the LMDB transaction operations. lmdb::transaction_t prevents copying, but a move constructor and move operator are provided to transfer ownwership of a transaction handle. Transactions may be read-write or read-only. A transaction must only be used by one thread at a time. Transactions are always required, even for read-only access. The transaction provides a consistent view of the data. transaction_t desctructor will automatically invoke a transaction_t::abort() if a transaction is still active at the time the transaction object is being destroyed.
 
 #### transaction_t() constructor
 Create a transaction_t object.
@@ -301,7 +301,63 @@ Create a transaction_t object.
 
 transaction_t(environment_t& env) noexcept;
 ```
-Normally the environment_t object passed to the constructor must have been initialized by environment_t::startup() call. On the other hand, the environment_t object passed to transaction_t constructor must call environment_t::startup() before a transaction is initiated by calling transaction_t::begin() method.
+Normally the environment_t object passed to the constructor must have been initialized by environment_t::startup() call. On the other hand, the environment_t object passed to transaction_t constructor must call environment_t::startup() before a transaction is initiated by calling transaction_t::begin() method. To actually get anything done, a transaction must be committed using transaction_t::commit(). Alternatively, all of a transaction's operations can be discarded using transaction_t::abort().
+
+In a read-only transaction, any cursors will not automatically be freed. In a read-write transaction, all cursors will be freed and must not be used again. For read-only transactions, obviously there is nothing to commit to storage. The transaction still must eventually be aborted to close any database handle(s) opened in it, or committed to keep the database handles around for reuse in new transactions. In addition, as long as a transaction is open, a consistent view of the database is kept alive, which requires storage. A read-only transaction that no longer requires this consistent view should be terminated (committed or aborted) when the view is no longer needed.
+
+There can be multiple simultaneously active read-only transactions but only one that can write. Once a single read-write transaction is opened, all further attempts to begin one will block until the first one is committed or aborted. This has no effect on read-only transactions, however, and they may continue to be opened at any time.
+
+#### transaction_t::begin() method
+Create a transaction for use with the environment. 
+
+```C++
+#include "lmdbpph.h"
+
+status_t begin(transaction_type_t type) noexcept;
+```
+
+A transaction started with transaction_t::begin() must be terminated with a transaction_t::commit() to save the changes, or transaction_t::abort() to discard any changes. A transaction and its cursors must only be used by a single thread, and s thread may only have a single transaction at a time. Please note, cursors may not span transactions. 
+
+transaction_t::begin() accepts one argument specifying the transaction type"
+* transaction_type_t::read_only - begin a read only transaction
+* transaction_type_t::read_write - begin a read write transaction
+
+If transaction_type_t::none is passed as parameter for transaction_t::begin() status_t returns an MDB_INVALID_TRANSACTION_TYPE error.
+
+Example:
+
+```C++
+#include "lmdbpp.h"
+#include <iostream>
+
+lmdb::environment_t env;
+
+void show_error(const char* method, const lmdb::status_t& status) noexcept
+{
+   std::cout << method << " failed with error " status.error() << ": " << status.message() << "\n";
+}   
+
+int main()
+{
+   lmdb::status_t status = env.startup(".\\");
+   if (status.ok())
+   {
+        transaction_t txn(transaction_type_t::read_only);
+        // open or create table(s) or a cursor(s)
+   }
+   else
+   {
+      show_error("startup()", status);
+   }
+   env.cleanup();
+}
+```
+
+### lmdb::table_t class
+
+### lmdb::cursor_t class
+
+### lmdb::status_t class
 
 ### License
 
