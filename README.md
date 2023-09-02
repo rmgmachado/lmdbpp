@@ -509,7 +509,7 @@ inline void put_value(keyvalue_base_t<KEY, VALUE>& kv, const VALUE& value) noexc
 
 #### table_t::del() method
 
-#### table_t::entries() method
+#### table_t::entries() method 
 
 #### table_t::handle() method
 
