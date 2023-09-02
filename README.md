@@ -535,26 +535,31 @@ void show_error(const char* method, const lmdb::status_t& status) noexcept
 int main()
 {
    lmdb::status_t status = env.startup(".\\");
-   if (status.ok())
+   if (status.nok())
    {
-        lmdb::transaction_t txn(transaction_type_t::read_write);
-        if (status = txn.begin(transaction_type_t::read_write); status.nok())
-        {
-          show_error("txn.begin()", status);
-          return status.error(); // txn and env destructors will do the cleanup
-        }
-        lmdb::table_t tbl(env);
-        if (status = tabl.create(txn, "test.mdb"); if (status.nok())
-        {
-          show_error("tbl.create()", status);
-          return status.error();
-        }
-        // perform other table_t or cursor_t operations
-   else
-   {
-      show_error("startup()", status);
+      show_error("env.startup(), status);
+      return status.error();
    }
+   lmdb::transaction_t txn(transaction_type_t::read_write);
+   if (status = txn.begin(transaction_type_t::read_write); status.nok())
+   {
+      show_error("txn.begin()", status);
+      return status.error(); // txn and env destructors will do the cleanup
+   }
+   lmdb::table_t tbl(env);
+   if (status = tabl.create(txn, "test.mdb"); if (status.nok())
+   {
+      show_error("tbl.create()", status);
+      return status.error();
+   }
+   if (status = txn.commit(); status.nok())
+   {
+      show_error("txn.commit()", status);
+      return status.error();
+   }
+   // perform other table_t or cursor_t operations
    env.cleanup();
+   return 0;
 }
 ```
 
