@@ -294,6 +294,12 @@ The LMDB environment pointer is needed when instanciating transaction_t and tabl
 ### lmdb::transaction_t class
 mdbpp lmdb::transaction_t class wraps all the LMDB transaction operations. lmdb::transaction_t prevents copying, but a move constructor and move operator are provided to transfer ownwership of a transaction handle. Transactions may be read-write or read-only. A transaction must only be used by one thread at a time. Transactions are always required, even for read-only access. The transaction provides a consistent view of the data. transaction_t desctructor will automatically invoke a transaction_t::abort() if a transaction is still active at the time the transaction object is being destroyed.
 
+To actually get anything done, a transaction must be committed using transaction_t::commit(). Alternatively, all of a transaction's operations can be discarded using transaction_t::abort().
+
+In a read-only transaction, any cursors will not automatically be freed. In a read-write transaction, all cursors will be freed and must not be used again. For read-only transactions, obviously there is nothing to commit to storage. The transaction still must eventually be aborted to close any database handle(s) opened in it, or committed to keep the database handles around for reuse in new transactions. In addition, as long as a transaction is open, a consistent view of the database is kept alive, which requires storage. A read-only transaction that no longer requires this consistent view should be terminated (committed or aborted) when the view is no longer needed.
+
+There can be multiple simultaneously active read-only transactions but only one that can write. Once a single read-write transaction is opened, all further attempts to begin one will block until the first one is committed or aborted. This has no effect on read-only transactions, however, and they may continue to be opened at any time.
+
 #### transaction_t() constructor
 Create a transaction_t object.
 ```C++
@@ -301,11 +307,7 @@ Create a transaction_t object.
 
 transaction_t(environment_t& env) noexcept;
 ```
-Normally the environment_t object passed to the constructor must have been initialized by environment_t::startup() call. On the other hand, the environment_t object passed to transaction_t constructor must call environment_t::startup() before a transaction is initiated by calling transaction_t::begin() method. To actually get anything done, a transaction must be committed using transaction_t::commit(). Alternatively, all of a transaction's operations can be discarded using transaction_t::abort().
-
-In a read-only transaction, any cursors will not automatically be freed. In a read-write transaction, all cursors will be freed and must not be used again. For read-only transactions, obviously there is nothing to commit to storage. The transaction still must eventually be aborted to close any database handle(s) opened in it, or committed to keep the database handles around for reuse in new transactions. In addition, as long as a transaction is open, a consistent view of the database is kept alive, which requires storage. A read-only transaction that no longer requires this consistent view should be terminated (committed or aborted) when the view is no longer needed.
-
-There can be multiple simultaneously active read-only transactions but only one that can write. Once a single read-write transaction is opened, all further attempts to begin one will block until the first one is committed or aborted. This has no effect on read-only transactions, however, and they may continue to be opened at any time.
+Normally the environment_t object passed to the constructor must have been initialized by environment_t::startup() call. On the other hand, the environment_t object passed to transaction_t constructor must call environment_t::startup() before a transaction is initiated by calling transaction_t::begin() method. 
 
 #### transaction_t::begin() method
 Create a transaction for use with the environment. 
