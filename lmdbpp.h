@@ -47,12 +47,13 @@ namespace lmdb {
    constexpr unsigned int DEFAULT_MAXREADERS = 126;
    constexpr size_t DEFAULT_MMAPSIZE = 10485760;
 
-   enum class transaction_type_t { read_write, read_only };
+   enum class transaction_type_t { read_write, read_only, none };
 
    constexpr int MDB_TABLE_ALREADY_OPEN = MDB_LAST_ERRCODE + 1;
    constexpr int MDB_TABLE_NOT_OPEN = MDB_LAST_ERRCODE + 2;
    constexpr int MDB_TRANSACTION_HANDLE_NULL = MDB_LAST_ERRCODE + 3;
    constexpr int MDB_TRANSACTION_ALREADY_STARTED = MDB_LAST_ERRCODE + 4;
+   constexpr int MDB_INVALID_TRANSACTION_TYPE = MDB_LAST_ERRCODE + 5;
 
    class status_t
    {
@@ -88,6 +89,7 @@ namespace lmdb {
          case MDB_TABLE_NOT_OPEN: return "Table not open";
          case MDB_TRANSACTION_HANDLE_NULL: return "Transaction handle not initialized";
          case MDB_TRANSACTION_ALREADY_STARTED: return "Transaction already started";
+         case MDB_INVALID_TRANSACTION_TYPE: return "Invalid transaction type";
          }
          return mdb_strerror(error_);
       }
@@ -136,11 +138,26 @@ namespace lmdb {
       status_t startup(const std::string& path, unsigned int max_tables = DEFAULT_MAXTABLES, size_t mmap_size = DEFAULT_MMAPSIZE, unsigned int max_readers = DEFAULT_MAXREADERS) noexcept
       {
          status_t status;
-         if (status = mdb_env_create(&envptr_); status.nok()) return status;
-         if (status = mdb_env_set_maxdbs(envptr_, max_tables); status.nok()) return status;
-         if (status = mdb_env_set_mapsize(envptr_, mmap_size); status.nok()) return status;
-         if (status = mdb_env_set_maxreaders(envptr_, max_readers); status.nok()) return status;
-         if (status = mdb_env_open(envptr_, path.c_str(), 0, (S_IRUSR | S_IWUSR)); status.nok()) return status;
+         if (status = mdb_env_create(&envptr_); status.nok())
+         {
+            return status;
+         }
+         if (status = mdb_env_set_maxdbs(envptr_, max_tables); status.nok())
+         {
+            return status;
+         }
+         if (status = mdb_env_set_mapsize(envptr_, mmap_size); status.nok())
+         {
+            return status;
+         }
+         if (status = mdb_env_set_maxreaders(envptr_, max_readers); status.nok())
+         {
+            return status;
+         }
+         if (status = mdb_env_open(envptr_, path.c_str(), 0, (S_IRUSR | S_IWUSR)); status.nok())
+         {
+            return status;
+         }
          max_tables_ = max_tables;
          mmap_size_ = mmap_size;
          return status;
@@ -159,7 +176,10 @@ namespace lmdb {
       int check() noexcept
       {
          int dead{ 0 };
-         if (!envptr_ && (mdb_reader_check(envptr_, &dead) >= 0)) return dead;
+         if (!envptr_ && (mdb_reader_check(envptr_, &dead) >= 0))
+         {
+            return dead;
+         }
          return 0;
       }
 
@@ -175,7 +195,10 @@ namespace lmdb {
          if (envptr_)
          {
             int rc = mdb_env_get_path(envptr_, &ptr);
-            if (rc != MDB_SUCCESS) return std::string();
+            if (rc != MDB_SUCCESS)
+            {
+               return std::string();
+            }
          }
          return std::string(ptr ? ptr : "");
       }
@@ -183,7 +206,10 @@ namespace lmdb {
       size_t max_readers() const noexcept
       {
          unsigned int readers{ 0 };
-         if (int rc = mdb_env_get_maxreaders(envptr_, &readers); rc != MDB_SUCCESS) return 0;
+         if (int rc = mdb_env_get_maxreaders(envptr_, &readers); rc != MDB_SUCCESS)
+         {
+            return 0;
+         }
          return readers;
       }
 
@@ -197,9 +223,14 @@ namespace lmdb {
          return mmap_size_;
       }
 
-      size_t mmap_size(size_t sz) noexcept
+      status_t mmap_size(size_t sz) noexcept
       {
-         if (status = mdb_env_set_mapsize(envptr_, sz); status.nok()) return status;
+         status_t status;
+         if (status = mdb_env_set_mapsize(envptr_, sz); status.nok())
+         {
+             return status;
+         }
+         return status;
       }
 
       size_t max_keysize() const noexcept
@@ -222,6 +253,7 @@ namespace lmdb {
    {
       environment_t& env_;
       MDB_txn* txnptr_{ nullptr };
+      transaction_type_t type_{ transaction_type_t::none };
 
    public:
       transaction_t() = delete;
@@ -240,8 +272,10 @@ namespace lmdb {
       transaction_t(transaction_t&& other) noexcept
          : env_{ other.env_ }
          , txnptr_{ other.txnptr_ }
+         , type_{ other.type_ }
       {
          other.txnptr_ = nullptr;
+         other.type_ = transaction_type_t::none;
       }
 
       transaction_t& operator=(transaction_t&& other) noexcept
@@ -250,45 +284,69 @@ namespace lmdb {
          {
             txnptr_ = other.txnptr_;
             other.txnptr_ = nullptr;
+            type_ = other.type_;
+            other.type_ = transaction_type_t::none;
          }
          return *this;
       }
 
       status_t begin(transaction_type_t type) noexcept
       {
+         if (type == transaction_type_t::none)
+         {
+            return status_t(MDB_INVALID_TRANSACTION_TYPE);
+         }
          if (txnptr_)
          {
-            if (status_t status(mdb_txn_commit(txnptr_));  status.nok()) return status;
+            if (status_t status(mdb_txn_commit(txnptr_));  status.nok())
+            {
+                return status;
+            }
+            type_ = transaction_type_t::none;
          }
          if (int rc = mdb_txn_begin(env_.handle(), nullptr, get_type(type), &txnptr_); rc != MDB_SUCCESS)
          {
             return status_t(rc);
          }
+         type_ = type;
          return status_t();
       }
 
       status_t commit() noexcept
       {
-         if (!txnptr_) return status_t(MDB_TRANSACTION_HANDLE_NULL);
+         if (!txnptr_)
+         {
+            return status_t(MDB_TRANSACTION_HANDLE_NULL);
+         }
          if (int rc = mdb_txn_commit(txnptr_); rc != MDB_SUCCESS)
          {
             return status_t(rc);
          }
          txnptr_ = nullptr;
+         type_ = transaction_type_t::none;
          return status_t();
       }
 
       status_t abort() noexcept
       {
-         if (!txnptr_) return status_t(MDB_TRANSACTION_HANDLE_NULL);
+         if (!txnptr_)
+         {
+            return status_t(MDB_TRANSACTION_HANDLE_NULL);
+         }
          mdb_txn_abort(txnptr_);
          txnptr_ = nullptr;
+         type_ = transaction_type_t::none;
          return status_t();
       }
 
       bool started() const noexcept
       {
          return txnptr_ != nullptr;
+      }
+
+      transaction_type_t type() const noexcept
+      {
+         return type_;
       }
 
       MDB_txn* handle() noexcept
@@ -304,7 +362,13 @@ namespace lmdb {
    private:
       int get_type(transaction_type_t type) const noexcept
       {
-         return (type == transaction_type_t::read_write) ? 0 : MDB_RDONLY;
+         switch (type)
+         {
+         case transaction_type_t::none: return MDB_RDONLY;
+         case transaction_type_t::read_write: return 0;
+         case transaction_type_t::read_only: return MDB_RDONLY;
+         }
+         return 0;
       }
    }; // class transaction_t
 
@@ -457,7 +521,10 @@ namespace lmdb {
 
       status_t close() noexcept
       {
-         if (!opened_) return status_t(MDB_TABLE_NOT_OPEN);
+         if (!opened_)
+         {
+            return status_t(MDB_TABLE_NOT_OPEN);
+         }
          opened_ = false;
          txnptr_ = nullptr;
          return status_t();
@@ -466,8 +533,14 @@ namespace lmdb {
       status_t drop() noexcept
       {
          status_t status{ MDB_TABLE_NOT_OPEN };
-         if (!opened_) return status;
-         if (status = mdb_drop(txnptr_, id_, 1); status.nok()) return status;
+         if (!opened_)
+         {
+            return status;
+         }
+         if (status = mdb_drop(txnptr_, id_, 1); status.nok())
+         {
+            return status;
+         }
          opened_ = false;
          return status;
       }
@@ -475,9 +548,15 @@ namespace lmdb {
       status_t get(const key_const_reference target_key, key_reference key, value_reference value) noexcept
       {
          status_t status{ MDB_TABLE_NOT_OPEN };
-         if (!opened_) return status;
+         if (!opened_)
+         {
+            return status;
+         }
          data_t<std::string> k(target_key), v;
-         if (status = mdb_get(txnptr_, id_, k.data(), v.data()); status.nok()) return status;
+         if (status = mdb_get(txnptr_, id_, k.data(), v.data()); status.nok())
+         {
+            return status;
+         }
          k.get(key);
          v.get(value);
          return status;
@@ -490,7 +569,10 @@ namespace lmdb {
 
       status_t put(key_const_reference key, value_const_reference value) noexcept
       {
-         if (!opened_) return status_t(MDB_TABLE_NOT_OPEN);
+         if (!opened_)
+         {
+            return status_t(MDB_TABLE_NOT_OPEN);
+         }
          data_t k(key);
          data_t v(value);
          return status_t(mdb_put(txnptr_, id_, k.data(), v.data(), 0));
@@ -503,7 +585,10 @@ namespace lmdb {
 
       status_t del(key_const_reference key, value_const_reference value) noexcept
       {
-         if (!opened_) return status_t(MDB_TABLE_NOT_OPEN);
+         if (!opened_)
+         {
+            return status_t(MDB_TABLE_NOT_OPEN);
+         }
          data_t k(key);
          data_t v(value);
          return status_t(mdb_del(txnptr_, id_, k.data(), v.data()));
@@ -528,8 +613,14 @@ namespace lmdb {
       status_t open(const std::string& path, bool create) noexcept
       {
          status_t status;
-         if (opened_) return status_t(MDB_TABLE_ALREADY_OPEN);
-         if (status = mdb_dbi_open(txnptr_, path.c_str(), (create ? MDB_CREATE : 0), &id_); status.nok()) return status;
+         if (opened_)
+         {
+            return status_t(MDB_TABLE_ALREADY_OPEN);
+         }
+         if (status = mdb_dbi_open(txnptr_, path.c_str(), (create ? MDB_CREATE : 0), &id_); status.nok())
+         {
+            return status;
+         }
          opened_ = true;
          return status;
       }
@@ -700,14 +791,20 @@ namespace lmdb {
       {
          key_type k{ target_key };
          value_type v;
-         if (status_t status = get(k, v, MDB_SET); status.nok()) return status;
+         if (status_t status = get(k, v, MDB_SET); status.nok())
+         {
+            return status;
+         }
          return status_t();
       }
 
       status_t find(key_const_reference& target_key, key_reference key, value_reference value) noexcept
       {
          key_type k{ target_key };
-         if (status_t status = get(k, value, MDB_SET_KEY); status.nok()) return status;
+         if (status_t status = get(k, value, MDB_SET_KEY); status.nok())
+         {
+            return status;
+         }
          key = k;
          return status_t();
       }
@@ -715,7 +812,10 @@ namespace lmdb {
       status_t search(key_const_reference& target_key, key_reference key, value_reference value) noexcept
       {
          key_type k{ target_key };
-         if (status_t status = get(k, value, MDB_SET_RANGE); status.nok()) return status;
+         if (status_t status = get(k, value, MDB_SET_RANGE); status.nok())
+         {
+            return status;
+         }
          key = k;
          return status_t();
       }
@@ -738,8 +838,14 @@ namespace lmdb {
          status_t status;
          data_t<KEY> k;
          data_t<VALUE> v;
-         if (is_set_operation(op)) k.set(key);
-         if (status = mdb_cursor_get(cursor_, k.data(), v.data(), op); status.nok()) return status;
+         if (is_set_operation(op))
+         {
+            k.set(key);
+         }
+         if (status = mdb_cursor_get(cursor_, k.data(), v.data(), op); status.nok())
+         {
+            return status;
+         }
          if (op != MDB_SET)
          {
             k.get(key);
@@ -753,8 +859,14 @@ namespace lmdb {
          status_t status;
          data_t<KEY> k;
          data_t<VALUE> v;
-         if (is_set_operation(op)) k.set(key);
-         if (status = mdb_cursor_get(cursor_, k.data(), v.data(), op); status.nok()) return status;
+         if (is_set_operation(op))
+         {
+            k.set(key);
+         }
+         if (status = mdb_cursor_get(cursor_, k.data(), v.data(), op); status.nok())
+         {
+            return status;
+         }
          if (op != MDB_SET) k.get(key);
          return status;
       }
