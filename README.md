@@ -87,7 +87,7 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 
 lmdbpp lmdb::environment_t class wraps all the LMDB environment operations. lmdb::environment_t provents copying, but a move constructor and operator is provided. Please note that only one environment should be created per process, to avoid issues with some OSses advisory locking. 
 
-#### constructor
+#### environment_t() constructor
 lmdb::environment_t class declares only a default constructor. Please note copy constructor and assignment operator have both been deleted, as this object cannot be copied. On the other hand, a move constructor and a move operator has been provided to transfer ownership to another lmdb::environment_t object. lmdb::environment_t automatically invokes cleanup() to close the environment and release resources.
 
 Example:
@@ -97,7 +97,7 @@ Example:
 lmdb::environment_t env;
 ```
 
-#### startup() method
+#### environment_t::startup() method
 Create or open a new LMDB environment. When the enviroment_t object is no longer needed, call to cleanup() to close the environment and release resources. The lmdb::environment_t destructor calls cleanup() automatically if the environment is still open when the object is destroyed.
 
 ```C++
@@ -106,7 +106,7 @@ Create or open a new LMDB environment. When the enviroment_t object is no longer
 status_t startup(const std::string& path,
                  unsigned int max_tables = DEFAULT_MAXTABLES,
                  size_t mmap_size = DEFAULT_MMAPSIZE,
-                 unsigned int max_readers = DEFAULT_MAXREADERS);
+                 unsigned int max_readers = DEFAULT_MAXREADERS) noexcept;
 ```
 
 | Parameter | In/Out | Description |
@@ -152,32 +152,32 @@ int main()
 }
 ```
 
-#### cleanup() method
+#### environment_t::cleanup() method
 Close the environment and release the memory map.
 
 ```C++
 #include "lmdbpp.h"
 
-void cleanup();
+void cleanup() noexcept;
 ```
 
 Only a single thread may call this function. All transactions, databases, and cursors must already be closed before calling this function. Attempts to use any such handles after calling this function will cause a SIGSEGV. The environment handle will be freed and must not be used again after this call. cleanup() is called automatically by lmdb::environment_t class to close the environment and release resources if a call to cleanup() was not made at the time the object is being destroyed.
 
-#### check() method
+#### environment_t::check() method
 Check for stale entries in the reader lock table. check() returns the number of stale readers checked and cleared.
 
 ```C++
 #include "lmdbpp.h"
 
-int check();
+int check() noexcept;
 ```
-#### flush() method
+#### environment_t::flush() method
 Flush the data buffers to disk. 
 
 ```C++
 #include "lmdbpp.h"
 
-status_t flush();
+status_t flush() noexcept;
 ```
 Data is always written to disk when a transaction is commited, but the operating system may keep it buffered. LMDB always flushes the OS buffers upon commit as well. 
 
@@ -207,24 +207,89 @@ int main()
    env.cleanup();
 }
 ```
-#### path() method
+#### environment_t::path() method
 Return the path that was used at the startup() call.
 ```C++
 #include "lmdbpp.h"
 
-std::string path();
+std::string path() const noexcept;
 ```
 If path() is called before a successful startup() call, an empty string is returned.
 
-#### max_readers() method
+#### environment_t::max_readers() method
+Return the maximum number of threads/reader slots for the environment. 
+```C++
+#include "lmdbpp.h"
 
-####  max_tables() method
+size_t max_readers() const noexcept;
+```
+The number of readers is set when environment is created with a call to startup() method. max_readers() doesn't return an error. If it cannot obtain the number of readers, it returns zero.
 
-#### mmap_size() method
+####  environment_t::max_tables() method
+Return the maximum number of tables the environment can support. 
+```C++
+#include "lmdbpp.h"
 
-#### max_keysize() method
+size_t max_tables() const noexcept;
+```
+max_tables() doesn't return an error. If it cannot obtain the number of tables from the environment, it returns zero.
 
-#### handle() method
+#### environment_t::mmap_size() method
+Set the new size of the memory map, or return the memory map size for the environment. 
+```C++
+#include "lmdbpp.h"
+
+size_t mmap_size() const noexcept;
+status_t mmap_size(size_t sz) noexcept;
+```
+mmap_size() without arguments just return the current size of the memory map for the environment. This method doesn't return an error. If it cannot obtain the memory map size of the environment, it returns zero.
+mmap_size(size_t sz), with a size_t argument, resizes the current memory map. This method returns status_t to indicate the result of the operation.
+
+Example:
+```C++
+#include "lmdbpp.h"
+#include <iostream>
+
+lmdb::environment_t env;
+
+void show_error(const char* method, const lmdb::status_t& status) noexcept
+{
+   std::cout << method << " failed with error " status.error() << ": " << status.message() << "\n";
+}   
+
+int main()
+{
+   lmdb::status_t status = env.startup(".\\");
+   if (status.ok())
+   {
+        // set the size of the environment
+        if (status = env.mmap_size(MAX_UINT32 / 4); status.nok()) show_error("mmap_size()", status);
+        std::out << "mmap_size: " << env.mmap_size() << "\n";
+   }
+   else
+   {
+      show_error("startup()", status);
+   }
+   env.cleanup();
+}
+```
+#### environment_t::max_keysize() method
+Return the maximum size of keys and data we can write to an LMDB key/value pair.
+```C++
+#include "lmdbpp.h"
+
+size_t max_keysize() const noexcept;
+```
+Depends on the compile-time constant MDB_MAXKEYSIZE. Default is 511.
+
+#### environment_t::handle() method
+Return the LMDB environment handle pointer.
+```C++
+#include "lmdbpp.h"
+
+MDB_env* handle() noexcept;
+```
+The LMDB environment pointer is needed when instanciating transaction_t and table_t objects.
 
 ### License
 
