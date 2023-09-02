@@ -417,11 +417,55 @@ Return the environment object associated with this transaction.
 environment_t& environment() noexcept;
 ```
 
+### lmdb::keyvalue_t type
+The keyvalue_t type is a typedef of a std::pair representing a key type as the first element of the pair, the value type as the second element of the pair. Using std:pair is a convenient way of representing the data stored in LMDB database.
+
+```C++
+template <typename KEY, typename VALUE>
+using keyvalue_base_t = std::pair<KEY, VALUE>;
+
+using keyvalue_t = keyvalue_base_t<std::string, std::string>;
+```
+
+#### make_keyvalue() function
+
+#### get_key() function
+
+#### get_value() function
+
+#### put_key() function
+
+#### put_value() function
+
 ### lmdb::table_t class
+
+#### table_t() constructor
+
+#### table_t::create() method
+
+#### table_t::open() method
+
+#### table_t::close() method
+
+#### table_t::drop() method
+
+#### table_t::key_value_t type
+
+#### table_t::get() method
+
+#### table_t::put() method
+
+#### table_t::del() method
+
+#### table_t::handle() method
+
+#### table_t::environment() method
 
 ### lmdb::cursor_t class
 
 ### lmdb::status_t class
+
+####
 
 ### License
 
