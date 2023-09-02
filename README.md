@@ -499,6 +499,16 @@ template <typename KEY, typename VALUE> class table_base_t;
 
 using table_t = table_base_t<std::string, std::string>;
 ```
+table_base_t class has a number of typedefs for the key and value types:
+
+```C++
+using key_type = KEY;
+using key_reference = KEY&;
+using key_const_reference = const KEY&;
+using value_type = VALUE;
+using value_reference = VALUE&;
+using value_const_reference = const VALUE&;
+```
 
 #### table_t() constructor
 Construct a lmdb::table_base_t object and the only parameter is a lmdb::environment_t object.
@@ -516,7 +526,7 @@ Open an existing table, or create a new table if one doesn't exist in the enviro
 ```C++
 #include "lmdbpp.h"
 
-status_t create(transaction_t& txn, const std::string& name)
+status_t create(transaction_t& txn, const std::string& name) noexcept;
 ```
 The transaction object passed as parameter must have been started with a read-write transaction_t::begin() method. The name of the table must not contain a directory path, as the table will be created or opened within the environment whose path was specified in environment_t::startup() method. The transaction must be commited for the table create to take effect.
 
@@ -564,32 +574,102 @@ int main()
 ```
 
 #### table_t::open() method
+Open an existing table. If table doesn't exist in the environment, an error is returned.
+```C++
+#include "lmdbpp.h"
+
+status_t open(transaction_t& txn, const std::string& name) noexcept;
+```
+The transaction object passed as parameter must have been started with a read-write transaction_t::begin() method. The name of the table must be the same name used with a previous table_t::create() call.
 
 #### table_t::close() method
+Close a table and release resources.
+
+```C++
+#include "lmdbpp.h"
+
+status_t close() noexcept;
+```
 
 #### table_t::drop() method
+Delete a table from the environment.
+```C++
+#include "lmdbpp.h"
 
-#### table_t::key_value_t type
+status_t drop() noexcept;
+```
+A table must be open before you call drop() method, and a read-write transaction must be in effect.
 
 #### table_t::get() method
+Retrieve a key/value pair from the table. 
+
+```C++
+#include "lmdbpp.h"
+
+status_t get(key_const_reference target_key, key_reference key, value_reference value) noexcept;
+status_t get(key_const_reference target_key, keyvalue_t& kv) noexcept;
+```
+The table must be open and you must hav an active read-only or read-write transaction. target_key parameter indicates the key of the key/value pair to be retrieved. table_t::get() returns status with MDB_NOTFOUND error if target_key not found.
 
 #### table_t::put() method
+Insert or update a key/value pair in the table.
+
+```C++
+#include "lmdbpp.h"
+
+status_t put(key_const_reference key, value_const_reference value) noexcept;
+status_t put(keyvalue_t& kv) noexcept;
+```
+The table must be open and you must have an active read-write transaction.
 
 #### table_t::del() method
+Delete a key/value pair from the table.
 
-#### table_t::entries() method 
+```C++
+#include "lmdbpp.h"
+
+status_t del(key_const_reference key, value_const_reference value) noexcept;
+status_t del(const keyvalue_t& kv) noexcept;
+```
+The table must be open and you must have an active read-write transaction.
+
+#### table_t::entries() method
+Retrieve the number of active key/pair entries in the table.
+
+```C++
+#include "lmdbpp.h"
+
+size_t entries(transaction_t& txn) noexcept;
+```
+The table must be open and you must pass an active read-only or read-write transaction as parameter.
 
 #### table_t::name() method
+Retrieve the name of the table.
 
+```C++
+#include "lmdbpp.h"
+
+std::string name() const noexcept;
+```
 #### table_t::handle() method
+Retrieve the LMDB table pointer handle.
 
+```C++
+#include "lmdbpp.h"
+
+MDB_dbi handle() const noexcept;
+```
 #### table_t::environment() method
+Retrieve the environment for this table.
 
+```C++
+#include "lmdbpp.h"
+
+environment_t& environment() noexcept;
+```
 ### lmdb::cursor_t class
 
 ### lmdb::status_t class
-
-####
 
 ### License
 
