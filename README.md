@@ -428,14 +428,66 @@ using keyvalue_t = keyvalue_base_t<std::string, std::string>;
 ```
 
 #### make_keyvalue() function
+lmdb::make_keyvalue() function provides a convenient way to build a std::pair containing a key/value pair for lmdbpp.
 
+```C++
+#include "lmdbpp.h"
+
+template <typename KEY, typename VALUE>
+inline auto make_keyvalue(const KEY& key, const VALUE& value) noexcept
+{
+  return std::make_pair(key, value);
+}
+```
 #### get_key() function
+lmdb::get_key() returns the key element of a key/value pair.
+
+```C++
+#include "lmdbpp.h"
+
+template <typename KEY, typename VALUE>
+inline auto get_key(const keyvalue_base_t<KEY, VALUE>& kv) noexcept
+{
+  return kv.first;
+}
+```
 
 #### get_value() function
+lmdb::get_value() returns the value element of a key/value pair.
+
+```C++
+#include "lmdbpp.h"
+
+template <typename KEY, typename VALUE>
+inline auto get_value(const keyvalue_base_t<KEY, VALUE>& kv) noexcept
+{
+  return kv.second;
+}
+```
 
 #### put_key() function
+lmdb::put_key updates the key element of a key/value pair
 
+```C++
+#include "lmdbpp.h"
+
+template <typename KEY, typename VALUE>
+inline void put_key(keyvalue_base_t<KEY, VALUE>& kv, const KEY& key) noexcept
+{
+  kv.first = key;
+}
+```
 #### put_value() function
+
+```C++
+#include "lmdbpp.h"
+
+template <typename KEY, typename VALUE>
+inline void put_value(keyvalue_base_t<KEY, VALUE>& kv, const VALUE& value) noexcept
+{
+  kv.second = value;
+}
+```
 
 ### lmdb::table_t class
 
