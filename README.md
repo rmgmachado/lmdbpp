@@ -349,7 +349,7 @@ int main()
    lmdb::status_t status = env.startup(".\\");
    if (status.ok())
    {
-        transaction_t txn(transaction_type_t::read_only);
+        lmdb::transaction_t txn(transaction_type_t::read_only);
         // open or create table(s) or a cursor(s)
    }
    else
@@ -490,10 +490,73 @@ inline void put_value(keyvalue_base_t<KEY, VALUE>& kv, const VALUE& value) noexc
 ```
 
 ### lmdb::table_t class
+mdbpp lmdb::table_t class wraps all the LMDB operations operations. All table operations must be done under transaction control, either a read-only or a read-write transaction. lmdb::transaction_t prevents copying, but a move constructor and move operator are provided to transfer ownwership of a transaction handle. lmdb:;table_t is a template class allowing you to specify the type used for keys, and types used for values. lmdbpp also provides a typedef for lmdb::table_t with both key and value types specified as std::string.
+
+```C++
+#include "lmdbpp.h"
+
+template <typename KEY, typename VALUE> class table_base_t;
+
+using table_t = table_base_t<std::string, std::string>;
+```
 
 #### table_t() constructor
+Construct a lmdb::table_base_t object and the only parameter is a lmdb::environment_t object.
+
+```C++
+#include "lmdbpp.h"
+
+template <typename KEY, typename VALUE>
+table_base_t(environment_t& env) noexcept;
+```
+environment_t object passed to the constructor must have been initialized by environment_t::startup() call. 
 
 #### table_t::create() method
+Open an existing table, or create a new table if one doesn't exist in the environment.
+```C++
+#include "lmdbpp.h"
+
+status_t create(transaction_t& txn, const std::string& name)
+```
+The transaction object passed as parameter must have been started with a read-write transaction_t::begin() method. The name of the table must not contain a directory path, as the table will be created or opened within the environment whose path was specified in environment_t::startup() method. The transaction must be commited for the table create to take effect.
+
+Example:
+```C++
+#include "lmdbpp.h"
+#include <iostream>
+
+lmdb::environment_t env;
+
+void show_error(const char* method, const lmdb::status_t& status) noexcept
+{
+   std::cout << method << " failed with error " status.error() << ": " << status.message() << "\n";
+}   
+
+int main()
+{
+   lmdb::status_t status = env.startup(".\\");
+   if (status.ok())
+   {
+        lmdb::transaction_t txn(transaction_type_t::read_write);
+        if (status = txn.begin(transaction_type_t::read_write); status.nok())
+        {
+          show_error("txn.begin()", status);
+          return status.error(); // txn and env destructors will do the cleanup
+        }
+        lmdb::table_t tbl(env);
+        if (status = tabl.create(txn, "test.mdb"); if (status.nok())
+        {
+          show_error("tbl.create()", status);
+          return status.error();
+        }
+        // perform other table_t or cursor_t operations
+   else
+   {
+      show_error("startup()", status);
+   }
+   env.cleanup();
+}
+```
 
 #### table_t::open() method
 
@@ -510,6 +573,8 @@ inline void put_value(keyvalue_base_t<KEY, VALUE>& kv, const VALUE& value) noexc
 #### table_t::del() method
 
 #### table_t::entries() method 
+
+#### table_t::name() method
 
 #### table_t::handle() method
 
