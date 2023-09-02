@@ -85,7 +85,7 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 
 ### lmdb::environment_t class
 
-lmdbpp lmdb::environment_t class wraps all the LMDB environment operations. lmdb::environment_t provents copying, but a move constructor and operator is provided. Please note that only one environment should be created per process, to avoid issues with some OSses advisory locking. 
+lmdbpp lmdb::environment_t class wraps all the LMDB environment operations. lmdb::environment_t prevents copying, but a move constructor and operator is provided. Please note that only one environment should be created per process, to avoid issues with some OSses advisory locking. 
 
 #### environment_t() constructor
 lmdb::environment_t class declares only a default constructor. Please note copy constructor and assignment operator have both been deleted, as this object cannot be copied. On the other hand, a move constructor and a move operator has been provided to transfer ownership to another lmdb::environment_t object. lmdb::environment_t automatically invokes cleanup() to close the environment and release resources.
@@ -290,6 +290,18 @@ Return the LMDB environment handle pointer.
 MDB_env* handle() noexcept;
 ```
 The LMDB environment pointer is needed when instanciating transaction_t and table_t objects.
+
+### lmdb::transaction_t class
+mdbpp lmdb::transaction_t class wraps all the LMDB transaction operations. lmdb::transaction_t prevents copying, but a move constructor and move operator are provided to transfer ownwership of a transaction handle. Transactions may be read-write or read-only. A transaction must only be used by one thread at a time. Transactions are always required, even for read-only access. The transaction provides a consistent view of the data. 
+
+#### transaction_t() constructor
+Create a transaction_t object.
+```C++
+#include "lmdbpph.h"
+
+transaction_t(environment_t& env) noexcept;
+```
+Normally the environment_t object passed to the constructor must have been initialized by environment_t::startup() call. On the other hand, the environment_t object passed to transaction_t constructor must call environment_t::startup() before a transaction is initiated by calling transaction_t::begin() method.
 
 ### License
 
