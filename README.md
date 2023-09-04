@@ -502,12 +502,17 @@ using table_t = table_base_t<std::string, std::string>;
 table_base_t class has a number of typedefs for the key and value types:
 
 ```C++
-using key_type = KEY;
-using key_reference = KEY&;
-using key_const_reference = const KEY&;
-using value_type = VALUE;
-using value_reference = VALUE&;
-using value_const_reference = const VALUE&;
+template <typename KEY, typename VALUE>
+class table_base_t
+{
+  ...
+public:
+  using key_type = KEY;
+  using key_reference = KEY&;
+  using key_const_reference = const KEY&;
+  using value_type = VALUE;
+  using value_reference = VALUE&;
+  using value_const_reference = const VALUE&;
 ```
 
 #### table_t() constructor
