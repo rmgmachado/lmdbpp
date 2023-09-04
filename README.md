@@ -593,7 +593,7 @@ Close a table and release resources.
 ```C++
 #include "lmdbpp.h"
 
-status_t close() noexcept;
+status_t close(transaction_t&) noexcept;
 ```
 
 #### table_t::drop() method
@@ -601,7 +601,7 @@ Delete a table from the environment.
 ```C++
 #include "lmdbpp.h"
 
-status_t drop() noexcept;
+status_t drop(transaction_t& txn) noexcept;
 ```
 A table must be open before you call drop() method, and a read-write transaction must be in effect.
 
@@ -611,8 +611,8 @@ Retrieve a key/value pair from the table.
 ```C++
 #include "lmdbpp.h"
 
-status_t get(key_const_reference target_key, key_reference key, value_reference value) noexcept;
-status_t get(key_const_reference target_key, keyvalue_t& kv) noexcept;
+status_t get(transaction_t& txn, key_const_reference target_key, key_reference key, value_reference value) noexcept;
+status_t get(transaction_t& txn, key_const_reference target_key, keyvalue_t& kv) noexcept;
 ```
 The table must be open and you must hav an active read-only or read-write transaction. target_key parameter indicates the key of the key/value pair to be retrieved. table_t::get() returns status with MDB_NOTFOUND error if target_key not found.
 
@@ -622,8 +622,8 @@ Insert or update a key/value pair in the table.
 ```C++
 #include "lmdbpp.h"
 
-status_t put(key_const_reference key, value_const_reference value) noexcept;
-status_t put(keyvalue_t& kv) noexcept;
+status_t put(transaction_t& txn, key_const_reference key, value_const_reference value) noexcept;
+status_t put(transaction_t& txn, keyvalue_t& kv) noexcept;
 ```
 The table must be open and you must have an active read-write transaction.
 
@@ -633,8 +633,8 @@ Delete a key/value pair from the table.
 ```C++
 #include "lmdbpp.h"
 
-status_t del(key_const_reference key, value_const_reference value) noexcept;
-status_t del(const keyvalue_t& kv) noexcept;
+status_t del(transaction_t& txn, key_const_reference key, value_const_reference value) noexcept;
+status_t del(transaction_t& txn, const keyvalue_t& kv) noexcept;
 ```
 The table must be open and you must have an active read-write transaction.
 
