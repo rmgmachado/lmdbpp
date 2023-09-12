@@ -241,7 +241,7 @@ TEST_CASE("lmdbpp.h table_t class tests", "[table_t]")
    }
    SECTION("Test table_t create() method")
    {
-      std::string path{ ".test.dbm" };
+      std::string path{ "test.dbm" };
       table_t tb(env);
       REQUIRE(txn.begin(transaction_type_t::read_write).ok());
       REQUIRE(tb.create(txn, path).ok());
@@ -254,10 +254,12 @@ TEST_CASE("lmdbpp.h table_t class tests", "[table_t]")
          , { "second", "second record" }
          , { "third", "third record" } 
       };
-      std::string path{ ".test.dbm" };
+      std::string path{ "test.dbm" };
       table_t tb(env);
       REQUIRE(txn.begin(transaction_type_t::read_write).ok());
       REQUIRE(tb.create(txn, path).ok());
+      REQUIRE(txn.commit().ok());
+      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
       for (auto [key, value] : data)
       {
          REQUIRE(tb.put(key, value).ok());
@@ -269,7 +271,7 @@ TEST_CASE("lmdbpp.h table_t class tests", "[table_t]")
       REQUIRE(tb.drop().ok());
       REQUIRE(txn.commit().ok());
    }
-   SECTION("Test table_t put() and get() methods with key_value_t")
+   SECTION("Test table_t put() and get() methods with keyvalue_t")
    {
       std::vector<std::pair<std::string, std::string>> data =
       {
@@ -277,14 +279,14 @@ TEST_CASE("lmdbpp.h table_t class tests", "[table_t]")
          , { "second", "second record" }
          , { "third", "third record" }
       };
-      std::string path{ ".test.dbm" };
+      std::string path{ "test.dbm" };
       table_t tb(env);
       REQUIRE(txn.begin(transaction_type_t::read_write).ok());
       REQUIRE(tb.create(txn, path).ok());
       for (auto item : data)
       {
          REQUIRE(tb.put(item).ok());
-         table_t::key_value_t kv;
+         keyvalue_t kv;
          REQUIRE(tb.get(item.first, kv).ok());
          REQUIRE(kv.first == item.first);
          REQUIRE(kv.second == item.second);
@@ -300,7 +302,7 @@ TEST_CASE("lmdbpp.h table_t class tests", "[table_t]")
          , { "second", "second record" }
          , { "third", "third record" }
       };
-      std::string path{ ".test.dbm" };
+      std::string path{ "test.dbm" };
       table_t tb(env);
       REQUIRE(txn.begin(transaction_type_t::read_write).ok());
       REQUIRE(tb.create(txn, path).ok());
@@ -317,7 +319,7 @@ TEST_CASE("lmdbpp.h table_t class tests", "[table_t]")
       REQUIRE(tb.drop().ok());
       REQUIRE(txn.commit().ok());
    }
-   SECTION("Test table_t del() with key_value_t")
+   SECTION("Test table_t del() with keyvalue_t")
    {
       std::vector<std::pair<std::string, std::string>> data =
       {
@@ -325,11 +327,11 @@ TEST_CASE("lmdbpp.h table_t class tests", "[table_t]")
          , { "second", "second record" }
          , { "third", "third record" }
       };
-      std::string path{ ".test.dbm" };
+      std::string path{ "test.dbm" };
       table_t tb(env);
       REQUIRE(txn.begin(transaction_type_t::read_write).ok());
       REQUIRE(tb.create(txn, path).ok());
-      table_t::key_value_t kv;
+      keyvalue_t kv;
       for (auto item : data)
       {
          REQUIRE(tb.put(item).ok());
@@ -339,6 +341,30 @@ TEST_CASE("lmdbpp.h table_t class tests", "[table_t]")
       }
       REQUIRE(tb.del(data[1]).ok());
       REQUIRE(tb.get(data[1].first, data[1]).nok());
+      REQUIRE(tb.drop().ok());
+      REQUIRE(txn.commit().ok());
+   }
+   SECTION("Test table_t entries() method")
+   {
+      std::vector<std::pair<std::string, std::string>> data =
+      {
+           { "first", "first record" }
+         , { "second", "second record" }
+         , { "third", "third record" }
+      };
+      std::string path{ "test.dbm" };
+      table_t tb(env);
+      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
+      REQUIRE(tb.create(txn, path).ok());
+      keyvalue_t kv;
+      for (auto item : data)
+      {
+         REQUIRE(tb.put(item).ok());
+         REQUIRE(tb.get(item.first, kv).ok());
+         REQUIRE(kv.first == item.first);
+         REQUIRE(kv.second == item.second);
+      }
+      REQUIRE(tb.entries(txn) == data.size());
       REQUIRE(tb.drop().ok());
       REQUIRE(txn.commit().ok());
    }
@@ -384,10 +410,10 @@ TEST_CASE("lmdbpp.h cursor_t class tests", "[cursor_t]")
       REQUIRE(cursor.first(key, value).ok());
       REQUIRE((key == data[0].first && value == data[0].second));
    }
-   SECTION("Test cursor_t class first() method with key_value_t")
+   SECTION("Test cursor_t class first() method with keyvalue_t")
    {
       cursor_t cursor(txn, tb);
-      cursor_t::key_value_t kv;
+      keyvalue_t kv;
       REQUIRE(cursor.first(kv).ok());
       REQUIRE(kv == data[0]);
    }
@@ -405,10 +431,10 @@ TEST_CASE("lmdbpp.h cursor_t class tests", "[cursor_t]")
       REQUIRE(cursor.last(key, value).ok());
       REQUIRE((key == data[2].first && value == data[2].second));
    }
-   SECTION("Test cursor_t class last() method with key_value_t")
+   SECTION("Test cursor_t class last() method with keyvalue_t")
    {
       cursor_t cursor(txn, tb);
-      cursor_t::key_value_t kv;
+      keyvalue_t kv;
       REQUIRE(cursor.last(kv).ok());
       REQUIRE(kv == data[2]);
    }
@@ -431,10 +457,10 @@ TEST_CASE("lmdbpp.h cursor_t class tests", "[cursor_t]")
       REQUIRE((key == data[2].first && value == data[2].second));
       REQUIRE(cursor.next(key, value).nok());
    }
-   SECTION("Test cursor_t class next() method key_value_t")
+   SECTION("Test cursor_t class next() method keyvalue_t")
    {
       cursor_t cursor(txn, tb);
-      cursor_t::key_value_t kv;
+      keyvalue_t kv;
       REQUIRE(cursor.first().ok());
       REQUIRE(cursor.next(kv).ok());
       REQUIRE(kv == data[1]);
@@ -464,10 +490,10 @@ TEST_CASE("lmdbpp.h cursor_t class tests", "[cursor_t]")
       REQUIRE((key == data[0].first && value == data[0].second));
       REQUIRE(cursor.prior(key, value).nok());
    }
-   SECTION("Test cursor_t class prior() method with key_value_t")
+   SECTION("Test cursor_t class prior() method with keyvalue_t")
    {
       cursor_t cursor(txn, tb);
-      cursor_t::key_value_t kv;
+      keyvalue_t kv;
       REQUIRE(cursor.last(kv).ok());
       REQUIRE(kv == data[2]);
       REQUIRE(cursor.prior(kv).ok());

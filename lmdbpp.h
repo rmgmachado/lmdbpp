@@ -49,11 +49,44 @@ namespace lmdb {
 
    enum class transaction_type_t { read_write, read_only, none };
 
-   constexpr int MDB_TABLE_ALREADY_OPEN = MDB_LAST_ERRCODE + 1;
-   constexpr int MDB_TABLE_NOT_OPEN = MDB_LAST_ERRCODE + 2;
+   constexpr int MDB_ALREADY_OPEN = MDB_LAST_ERRCODE + 1;
+   constexpr int MDB_NOT_OPEN = MDB_LAST_ERRCODE + 2;
    constexpr int MDB_TRANSACTION_HANDLE_NULL = MDB_LAST_ERRCODE + 3;
    constexpr int MDB_TRANSACTION_ALREADY_STARTED = MDB_LAST_ERRCODE + 4;
    constexpr int MDB_INVALID_TRANSACTION_TYPE = MDB_LAST_ERRCODE + 5;
+
+   template <typename KEY, typename VALUE>
+   using keyvalue_base_t = std::pair<KEY, VALUE>;
+
+   template <typename KEY, typename VALUE>
+   inline auto make_keyvalue(const KEY& key, const VALUE& value) noexcept
+   {
+      return std::make_pair(key, value);
+   }
+
+   template <typename KEY, typename VALUE>
+   inline auto get_key(const keyvalue_base_t<KEY, VALUE>& kv) noexcept
+   {
+      return kv.first;
+   }
+
+   template <typename KEY, typename VALUE>
+   inline auto get_value(const keyvalue_base_t<KEY, VALUE>& kv) noexcept
+   {
+      return kv.second;
+   }
+
+   template <typename KEY, typename VALUE>
+   inline void put_key(keyvalue_base_t<KEY, VALUE>& kv, const KEY& key) noexcept
+   {
+      kv.first = key;
+   }
+
+   template <typename KEY, typename VALUE>
+   inline void put_value(keyvalue_base_t<KEY, VALUE>& kv, const VALUE& value) noexcept
+   {
+      kv.second = value;
+   }
 
    class status_t
    {
@@ -76,6 +109,17 @@ namespace lmdb {
          return *this;
       }
 
+      bool operator==(const status_t& other) const noexcept
+      {
+         return error_ == other.error_;
+      }
+
+      bool operator!=(const status_t& other) const noexcept
+
+      {
+         return error_ != other.error_;
+      }
+
       bool ok() const noexcept { return error_ == MDB_SUCCESS; }
       bool nok() const noexcept { return error_ != MDB_SUCCESS; }
       int error() const noexcept { return error_; }
@@ -85,8 +129,8 @@ namespace lmdb {
          switch (error_)
          {
          case MDB_SUCCESS: return "Success";
-         case MDB_TABLE_ALREADY_OPEN: return "Table already open";
-         case MDB_TABLE_NOT_OPEN: return "Table not open";
+         case MDB_ALREADY_OPEN: return "Table or cursor already open";
+         case MDB_NOT_OPEN: return "Table or cursor not open";
          case MDB_TRANSACTION_HANDLE_NULL: return "Transaction handle not initialized";
          case MDB_TRANSACTION_ALREADY_STARTED: return "Transaction already started";
          case MDB_INVALID_TRANSACTION_TYPE: return "Invalid transaction type";
@@ -260,7 +304,7 @@ namespace lmdb {
       transaction_t(const transaction_t&) = delete;
       transaction_t& operator=(const transaction_t&) = delete;
 
-      explicit transaction_t(environment_t& env)
+      explicit transaction_t(environment_t& env) noexcept
          : env_{ env }
       {}
 
@@ -457,8 +501,8 @@ namespace lmdb {
    {
       environment_t& env_;
       MDB_dbi id_{ 0 };
-      MDB_txn* txnptr_{ nullptr };
       bool opened_{ false };
+      std::string name_;
 
    public:
       using key_type = KEY;
@@ -467,7 +511,6 @@ namespace lmdb {
       using value_type = VALUE;
       using value_reference = VALUE&;
       using value_const_reference = const VALUE&;
-      using key_value_t = std::pair<KEY, VALUE>;
 
       table_base_t() = delete;
       table_base_t(const table_base_t&) = delete;
@@ -485,11 +528,10 @@ namespace lmdb {
       table_base_t(table_base_t&& other) noexcept
          : env_{ other.env_ }
          , id_{ other.id_ }
-         , txnptr_ { other.txnptr_ }
          , opened_{ other.opened_ }
+         , name_{ std::move(other.name_) }
       {
          other.id_ = 0;
-         other.txnptr_ = nullptr;
          other.opened_ = false;
       }
 
@@ -499,61 +541,60 @@ namespace lmdb {
          {
             id_ = other.id_;
             opened_ = other.opened_;
-            txnptr_ = other.txnptr_;
+            name_ = std::move(other.name_);
             other.id_ = 0;
             other.opened_ = false;
-            other.txnptr_ = nullptr;
+
          }
          return *this;
       }
 
-      status_t create(transaction_t& txn, const std::string& path) noexcept
+      status_t create(transaction_t& txn, const std::string& name) noexcept
       {
-         txnptr_ = txn.handle();
-         return open(path, true);
+         return open(txn, name, true);
       }
 
-      status_t open(transaction_t& txn, const std::string& path) noexcept
+      status_t open(transaction_t& txn, const std::string& name) noexcept
       {
-         txnptr_ = txn->handle();
-         return open(path, false);
+         return open(txn, name, false);
       }
 
-      status_t close() noexcept
+      status_t close(transaction_t&) noexcept
       {
          if (!opened_)
          {
-            return status_t(MDB_TABLE_NOT_OPEN);
+            return status_t(MDB_NOT_OPEN);
          }
          opened_ = false;
-         txnptr_ = nullptr;
+         name_.clear();
          return status_t();
       }
 
-      status_t drop() noexcept
+      status_t drop(transaction_t& txn) noexcept
       {
-         status_t status{ MDB_TABLE_NOT_OPEN };
+         status_t status{ MDB_NOT_OPEN };
          if (!opened_)
          {
             return status;
          }
-         if (status = mdb_drop(txnptr_, id_, 1); status.nok())
+         if (status = mdb_drop(txn.handle(), id_, 1); status.nok())
          {
             return status;
          }
          opened_ = false;
+         name_.clear();
          return status;
       }
 
-      status_t get(const key_const_reference target_key, key_reference key, value_reference value) noexcept
+      status_t get(transaction_t& txn, const key_const_reference target_key, key_reference key, value_reference value) noexcept
       {
-         status_t status{ MDB_TABLE_NOT_OPEN };
+         status_t status{ MDB_NOT_OPEN };
          if (!opened_)
          {
             return status;
          }
          data_t<std::string> k(target_key), v;
-         if (status = mdb_get(txnptr_, id_, k.data(), v.data()); status.nok())
+         if (status = mdb_get(txn.handle(), id_, k.data(), v.data()); status.nok())
          {
             return status;
          }
@@ -562,41 +603,58 @@ namespace lmdb {
          return status;
       }
 
-      status_t get(const key_const_reference target_key, key_value_t& kv) noexcept
+      status_t get(transaction_t& txn, const key_const_reference target_key, keyvalue_base_t<KEY, VALUE>& kv) noexcept
       {
-         return get(target_key, kv.first, kv.second);
+         return get(txn, target_key, kv.first, kv.second);
       }
 
-      status_t put(key_const_reference key, value_const_reference value) noexcept
+      status_t put(transaction_t& txn, key_const_reference key, value_const_reference value) noexcept
       {
          if (!opened_)
          {
-            return status_t(MDB_TABLE_NOT_OPEN);
+            return status_t(MDB_NOT_OPEN);
          }
          data_t k(key);
          data_t v(value);
-         return status_t(mdb_put(txnptr_, id_, k.data(), v.data(), 0));
+         return status_t(mdb_put(txn.handle(), id_, k.data(), v.data(), 0));
       }
 
-      status_t put(const key_value_t& kv) noexcept
+      status_t put(transaction_t& txn, const keyvalue_base_t<KEY, VALUE>& kv) noexcept
       {
-         return put(kv.first, kv.second);
+         return put(txn, kv.first, kv.second);
       }
 
-      status_t del(key_const_reference key, value_const_reference value) noexcept
+      status_t del(transaction_t& txn, key_const_reference key, value_const_reference value) noexcept
       {
          if (!opened_)
          {
-            return status_t(MDB_TABLE_NOT_OPEN);
+            return status_t(MDB_NOT_OPEN);
          }
          data_t k(key);
          data_t v(value);
-         return status_t(mdb_del(txnptr_, id_, k.data(), v.data()));
+         return status_t(mdb_del(txn.handle(), id_, k.data(), v.data()));
       }
 
-      status_t del(const key_value_t& kv) noexcept
+      status_t del(transaction_t& txn, const keyvalue_base_t<KEY, VALUE>& kv) noexcept
       {
-         return del(kv.first, kv.second);
+         return del(txn, kv.first, kv.second);
+      }
+
+      size_t entries(transaction_t& txn) noexcept
+      {
+         MDB_stat stat;
+         status_t status;
+         size_t retval{ 0 };
+         if (status = mdb_stat(txn.handle(), id_, &stat); status.ok())
+         {
+            retval = stat.ms_entries;
+         }
+         return retval;
+      }
+
+      std::string name() const noexcept
+      {
+         return name_;
       }
 
       MDB_dbi handle() const noexcept
@@ -610,14 +668,14 @@ namespace lmdb {
       }
 
    private:
-      status_t open(const std::string& path, bool create) noexcept
+      status_t open(transaction_t& txn, const std::string& name, bool create) noexcept
       {
          status_t status;
          if (opened_)
          {
-            return status_t(MDB_TABLE_ALREADY_OPEN);
+            return status_t(MDB_ALREADY_OPEN);
          }
-         if (status = mdb_dbi_open(txnptr_, path.c_str(), (create ? MDB_CREATE : 0), &id_); status.nok())
+         if (status = mdb_dbi_open(txn.handle(), name.c_str(), (create ? MDB_CREATE : 0), &id_); status.nok())
          {
             return status;
          }
@@ -626,26 +684,12 @@ namespace lmdb {
       }
    }; // class table_base_t
 
-   class cursor_exception_t : public std::runtime_error
-   {
-      int errcode_{ 0 };
-
-   public:
-      cursor_exception_t(status_t status)
-         : errcode_{ status.error() }
-         , runtime_error(status.message().c_str())
-      {}
-
-      int error() const
-      {
-         return errcode_;
-      }
-   };
-
    template <typename KEY, typename VALUE>
    class cursor_base_t
    {
       MDB_cursor* cursor_{ nullptr };
+      table_base_t<KEY, VALUE>& table_;
+      transaction_t txn_;
 
    public:
       using key_type = KEY;
@@ -654,7 +698,6 @@ namespace lmdb {
       using value_type = VALUE;
       using value_reference = VALUE&;
       using value_const_reference = const VALUE&;
-      using key_value_t = std::pair<KEY, VALUE>;
 
       cursor_base_t() = delete;
       cursor_base_t(const cursor_base_t&) = delete;
@@ -662,23 +705,18 @@ namespace lmdb {
 
       ~cursor_base_t() noexcept
       {
-         if (cursor_)
-         {
-            mdb_cursor_close(cursor_);
-            cursor_ = nullptr;
-         }
+         close();
       }
 
-      explicit cursor_base_t(transaction_t& txn, table_base_t<KEY, VALUE>& table)
-      {
-         if (int rc = mdb_cursor_open(txn.handle(), table.handle(), &cursor_); rc != MDB_SUCCESS)
-         {
-            throw cursor_exception_t(status_t(rc));
-         }
-      }
+      explicit cursor_base_t(table_base_t<KEY, VALUE>& table)
+         : table_{ table }
+         , txn_(table.environment())
+      {}
 
       cursor_base_t(cursor_base_t&& other) noexcept
          : cursor_{ other.cursor_ }
+         , table_{ other.table_ }
+         , txn_{ std::move(other.txn_) }
       {
          other.cursor_ = nullptr;
       }
@@ -689,8 +727,43 @@ namespace lmdb {
          {
             cursor_ = other.cursor_;
             other.cursor_ = nullptr;
+            txn_ = std::move(other.txn_);
+            table_ = other.table_;
          }
          return *this;
+      }
+
+      status_t open(transaction_type_t txn_type = transaction_type_t::read_only) noexcept
+      {
+         status_t status{ MDB_ALREADY_OPEN };
+         if (cursor_)
+         {
+            return status;
+         }
+         if (status = txn_.begin(txn_type); status.nok())
+         {
+            return status;
+         }
+         if (status = mdb_cursor_open(txn_.handle(), table.handle(), &cursor_); status.nok())
+         {
+            txn_.abort();
+            return status;
+         }
+         return status;
+      }
+
+      status_t close() noexcept
+      {
+         if (txn_.started())
+         {
+            txn_.commit();
+         }
+         if (cursor_)
+         {
+            mdb_cursor_close(cursor_);
+            cursor_ = nullptr;
+         }
+         return status_t();
       }
 
       status_t current(key_reference key, value_reference value) noexcept
@@ -708,7 +781,7 @@ namespace lmdb {
          return get(key, value, MDB_FIRST);
       }
 
-      status_t first(key_value_t& kv) noexcept
+      status_t first(keyvalue_base_t<KEY, VALUE>& kv) noexcept
       {
          return first(kv.first, kv.second);
       }
@@ -729,7 +802,7 @@ namespace lmdb {
          return get(key, value, MDB_LAST);
       }
 
-      status_t last(key_value_t& kv) noexcept
+      status_t last(keyvalue_base_t<KEY, VALUE>& kv) noexcept
       {
          return last(kv.first, kv.second);
       }
@@ -750,7 +823,7 @@ namespace lmdb {
          return get(key, value, MDB_NEXT);
       }
 
-      status_t next(key_value_t& kv) noexcept
+      status_t next(keyvalue_base_t<KEY, VALUE>& kv) noexcept
       {
          return next(kv.first, kv.second);
       }
@@ -771,7 +844,7 @@ namespace lmdb {
          return get(key, value, MDB_PREV);
       }
 
-      status_t prior(key_value_t& kv) noexcept
+      status_t prior(keyvalue_base_t<KEY, VALUE>& kv) noexcept
       {
          return prior(kv.first, kv.second);
       }
@@ -822,22 +895,52 @@ namespace lmdb {
 
       status_t put(key_const_reference key, value_const_reference value) noexcept
       {
-         data_t<KEY> k(key);
-         data_t<VALUE> v(value);
-         return status_t(mdb_cursor_put(cursor_, k.data(), v.data(), 0));
+         if (!cursor_)
+         {
+            return status_t(MDB_NOT_OPEN);
+         }
+         return status_t(mdb_cursor_put(cursor_, data_t<KEY>(key).data(), data_t<VALUE>(value).data(), 0));
       }
 
       status_t del() noexcept
       {
+         if (!cursor_)
+         {
+            return status_t(MDB_NOT_OPEN);
+         }
          return status_t(mdb_cursor_del(cursor_, 0));
+      }
+
+      table_base_t<KEY, VALUE>& table() noexcept
+      {
+         return table_;
+      }
+
+      transaction_t& transaction() noexcept
+      {
+         return txn_;
+      }
+      
+      transaction_type_t transaction_type() const noexcept
+      {
+         return txn_.type();
+      }
+
+      MDB_cursor* handle() noexcept
+      {
+         return cursor_;
       }
 
    private:
       status_t get(key_reference key, value_reference value, MDB_cursor_op op) noexcept
       {
-         status_t status;
+         status_t status{ MDB_NOT_OPEN };
          data_t<KEY> k;
          data_t<VALUE> v;
+         if (!cursor_)
+         {
+            return status;
+         }
          if (is_set_operation(op))
          {
             k.set(key);
@@ -856,9 +959,13 @@ namespace lmdb {
 
       status_t get(key_reference key, MDB_cursor_op op) noexcept
       {
-         status_t status;
+         status_t status{ MDB_NOT_OPEN };
          data_t<KEY> k;
          data_t<VALUE> v;
+         if (!cursor_)
+         {
+            return status;
+         }
          if (is_set_operation(op))
          {
             k.set(key);
@@ -867,7 +974,10 @@ namespace lmdb {
          {
             return status;
          }
-         if (op != MDB_SET) k.get(key);
+         if (op != MDB_SET)
+         {
+            k.get(key);
+         }
          return status;
       }
 
@@ -879,5 +989,6 @@ namespace lmdb {
 
    using table_t = table_base_t<std::string, std::string>;
    using cursor_t = cursor_base_t<std::string, std::string>;
+   using keyvalue_t = keyvalue_base_t<std::string, std::string>;
 
 } // namespace lmdb
