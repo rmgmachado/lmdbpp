@@ -65,7 +65,7 @@ lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes cla
 
 | class | Description |
 |--|--|
-| lmdb::database_t  | Everything starts with a database, created by call to initialize() method. Each process should have only one database to prevent issues with locking. Call lmdb::environment_t class cleanup() method to close and cleanup a database. This lmdb::database_t wraps the operations performed by LMDB environment|
+| lmdb::database_t  | Everything starts with a database, created by call to initialize() method. Each process should have only one database to prevent issues with locking. Call lmdb::database_t class cleanup() method to close and cleanup a database. This lmdb::database_t wraps the operations performed by LMDB environment|
 | lmdb::transaction_t | Once a database is started, a transaction object can be created. Every LMDB operation needs to be performed under a read_write or read_only transaction. begin() method starts a transaction, commit() commits any changes, while abort() reverts any changes |
 | lmdb::store_t | This is equivalent to a table in a SQL database, and perform operations such as get(), put() and del() can be performed with table_t object. In LMDB this object is usually referenced as a DBI |
 | lmdb::cursor_t | After a store is opened or created, a cursor_t object can be created to perform cursor operations such as first(), last(), next(), prior(), seek(), search() and find(), put() and del() |
@@ -90,7 +90,7 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 
 ### lmdb::database_t class
 
-lmdbpp lmdb::environment_t class wraps all the LMDB environment operations. lmdb::environment_t prevents copying, but a move constructor and operator is provided. Please note that only one environment should be created per process, to avoid issues with some OSses advisory locking. 
+lmdbpp lmdb::database_t class wraps all the LMDB environment operations. lmdb::database_t prevents copying, but a move constructor and operator is provided. Please note that only one environment should be created per process, to avoid issues with some OSses advisory locking. 
 
 #### environment_t() constructor
 lmdb::environment_t class declares only a default constructor. Please note copy constructor and assignment operator have both been deleted, as this object cannot be copied. On the other hand, a move constructor and a move operator has been provided to transfer ownership to another lmdb::environment_t object. lmdb::environment_t automatically invokes cleanup() to close the environment and release resources.
@@ -121,7 +121,7 @@ status_t initialize(const std::string& path,
 | mmap_size | In | Set the size of the memory map to use for this environment. The size should be a multiple of the OS page size. The default is 10,485,760 bytes. Any attempt to set a size smaller than the space already consumed by the environment will be silently changed to the current size of the used space.  |
 | max_readers | In | Set the maximum number of threads/reader slots for the environment. This defines the number of slots in the lock table that is used to track readers in the the environment. The default is 126. Starting a read-only transaction normally ties a lock table slot to the current thread until the environment closes or the thread exits. |
 
-Parameter mmap_size is also the maximum size of the database. The value should be chosen as large as possible, to accommodate future growth of the database. The new size takes effect immediately for the current process but will not be persisted to any others until a write transaction has been committed by the current process. If the mapsize is increased by another process, and data has grown beyond the range of the current mapsize, transaction_t::begin() will return MDB_MAP_RESIZED error, in which case environment_t::mmap_size() method may be called with a size of zero to adopt the new size.
+Parameter mmap_size is also the maximum size of the database. The value should be chosen as large as possible, to accommodate future growth of the database. The new size takes effect immediately for the current process but will not be persisted to any others until a write transaction has been committed by the current process. If the mapsize is increased by another process, and data has grown beyond the range of the current mapsize, transaction_t::begin() will return MDB_MAP_RESIZED error, in which case database_t::mmap_size() method may be called with a size of zero to adopt the new size.
 
 For most situations the default values of the parameters are sufficient. The default values used by startup() parameters:
 ```C++
@@ -415,177 +415,84 @@ MDB_env* handle() noexcept;
 ```
 The LMDB database handle pointer is needed when instanciating transaction_t and table_t objects.
 
-#### transaction_t::environment() method
-Return the environment object associated with this transaction.
+#### transaction_t::database() method
+Return the database object associated with this transaction.
 ```C++
 #include "lmdbpp.h"
 
-environment_t& environment() noexcept;
+database_t& database() noexcept;
 ```
 
-### lmdb::keyvalue_t type
-The keyvalue_t type is a typedef of a std::pair representing a key type as the first element of the pair, the value type as the second element of the pair. Using std:pair is a convenient way of representing the data stored in LMDB database.
-
-```C++
-template <typename KEY, typename VALUE>
-using keyvalue_base_t = std::pair<KEY, VALUE>;
-
-using keyvalue_t = keyvalue_base_t<std::string, std::string>;
-```
-
-#### make_keyvalue() function
-lmdb::make_keyvalue() function provides a convenient way to build a std::pair containing a key/value pair for lmdbpp.
-
-```C++
-#include "lmdbpp.h"
-
-template <typename KEY, typename VALUE>
-inline auto make_keyvalue(const KEY& key, const VALUE& value) noexcept
-{
-  return std::make_pair(key, value);
-}
-```
-#### get_key() function
-lmdb::get_key() returns the key element of a key/value pair.
-
-```C++
-#include "lmdbpp.h"
-
-template <typename KEY, typename VALUE>
-inline auto get_key(const keyvalue_base_t<KEY, VALUE>& kv) noexcept
-{
-  return kv.first;
-}
-```
-
-#### get_value() function
-lmdb::get_value() returns the value element of a key/value pair.
-
-```C++
-#include "lmdbpp.h"
-
-template <typename KEY, typename VALUE>
-inline auto get_value(const keyvalue_base_t<KEY, VALUE>& kv) noexcept
-{
-  return kv.second;
-}
-```
-
-#### put_key() function
-lmdb::put_key updates the key element of a key/value pair
-
-```C++
-#include "lmdbpp.h"
-
-template <typename KEY, typename VALUE>
-inline void put_key(keyvalue_base_t<KEY, VALUE>& kv, const KEY& key) noexcept
-{
-  kv.first = key;
-}
-```
-#### put_value() function
-
-```C++
-#include "lmdbpp.h"
-
-template <typename KEY, typename VALUE>
-inline void put_value(keyvalue_base_t<KEY, VALUE>& kv, const VALUE& value) noexcept
-{
-  kv.second = value;
-}
-```
-
-### lmdb::table_t class
-mdbpp lmdb::table_t class wraps all the LMDB operations operations. All table operations must be done under transaction control, either a read-only or a read-write transaction. lmdb::transaction_t prevents copying, but a move constructor and move operator are provided to transfer ownwership of a transaction handle. lmdb:;table_t is a template class allowing you to specify the type used for keys, and types used for values. lmdbpp also provides a typedef for lmdb::table_t with both key and value types specified as std::string.
-
-```C++
-#include "lmdbpp.h"
-
-template <typename KEY, typename VALUE> class table_base_t;
-
-using table_t = table_base_t<std::string, std::string>;
-```
-table_base_t class has a number of typedefs for the key and value types:
-
-```C++
-template <typename KEY, typename VALUE>
-class table_base_t
-{
-  ...
-public:
-  using key_type = KEY;
-  using key_reference = KEY&;
-  using key_const_reference = const KEY&;
-  using value_type = VALUE;
-  using value_reference = VALUE&;
-  using value_const_reference = const VALUE&;
-```
+### lmdb::store_t class
+mdbpp lmdb::store_t class wraps all the LMDB operations operations. All table operations must be done under transaction control, either a read-only or a read-write transaction. lmdb::transaction_t prevents copying, but a move constructor and move operator are provided to transfer ownwership of a transaction handle. 
 
 #### table_t() constructor
-Construct a lmdb::table_base_t object and the only parameter is a lmdb::environment_t object.
+Construct a lmdb::store_t object and the only parameter is a lmdb::database_t object.
 
 ```C++
 #include "lmdbpp.h"
 
 template <typename KEY, typename VALUE>
-table_base_t(environment_t& env) noexcept;
+table_base_t(database_t& env) noexcept;
 ```
-environment_t object passed to the constructor must have been initialized by environment_t::startup() call. 
+database_t object passed to the constructor must have been initialized by databa_t::initialize() call. 
 
 #### table_t::create() method
-Open an existing table, or create a new table if one doesn't exist in the environment.
+Open an existing table, or create a new table if one doesn't exist in the database.
 ```C++
 #include "lmdbpp.h"
 
 status_t create(transaction_t& txn, const std::string& name) noexcept;
 ```
-The transaction object passed as parameter must have been started with a read-write transaction_t::begin() method. The name of the table must not contain a directory path, as the table will be created or opened within the environment whose path was specified in environment_t::startup() method. The transaction must be commited for the table create to take effect.
+The transaction object passed as parameter must have been started with a read-write transaction_t::begin() method. The name of the store must not contain a directory path, as the table will be created or opened within the database whose path was specified in database_t::initialize() method. The transaction must be commited for store create to take effect.
 
 Example:
 ```C++
 #include "lmdbpp.h"
 #include <iostream>
 
-lmdb::environment_t env;
+lmdb::database_t db;
 
-void show_error(const char* method, const lmdb::status_t& status) noexcept
+void show_error(const lmdb::status_t& status, const char* method) noexcept
 {
-   std::cout << method << " failed with error " status.error() << ": " << status.message() << "\n";
-}   
+   std::cout << method << " failed with error " << status.error() << ": " << status.message() << "\n";
+}
 
 int main()
 {
-   lmdb::status_t status = env.startup(".\\");
+   lmdb::status_t status = db.initialize(".\\");
    if (status.nok())
    {
-      show_error("env.startup(), status);
-      return status.error();
+      show_error(status, __func__);
+         return status.error();
    }
-   lmdb::transaction_t txn(transaction_type_t::read_write);
+   lmdb::transaction_t txn(db);
    if (status = txn.begin(transaction_type_t::read_write); status.nok())
    {
-      show_error("txn.begin()", status);
+      show_error(status, __func__);
       return status.error(); // txn and env destructors will do the cleanup
    }
-   lmdb::table_t tbl(env);
-   if (status = tabl.create(txn, "test.mdb"); if (status.nok())
+   lmdb::store_t tbl(db);
+   status = tbl.create(txn, "test.mdb"); 
+   if (status.nok())
    {
-      show_error("tbl.create()", status);
+      show_error(status, __func__);
       return status.error();
    }
-   if (status = txn.commit(); status.nok())
+   status = txn.commit();
+   if (status.nok())
    {
-      show_error("txn.commit()", status);
+      show_error(status, __func__);
       return status.error();
    }
    // perform other table_t or cursor_t operations
-   env.cleanup();
+   db.cleanup();
    return 0;
 }
 ```
 
 #### table_t::open() method
-Open an existing table. If table doesn't exist in the environment, an error is returned.
+Open an existing store. If store doesn't exist in the database, an error is returned.
 ```C++
 #include "lmdbpp.h"
 
@@ -603,7 +510,7 @@ status_t close(transaction_t&) noexcept;
 ```
 
 #### table_t::drop() method
-Delete a table from the environment.
+Delete a table from the database.
 ```C++
 #include "lmdbpp.h"
 
@@ -670,13 +577,13 @@ Retrieve the LMDB table pointer handle.
 
 MDB_dbi handle() const noexcept;
 ```
-#### table_t::environment() method
-Retrieve the environment for this table.
+#### table_t::database() method
+Retrieve the database object associated with this table.
 
 ```C++
 #include "lmdbpp.h"
 
-environment_t& environment() noexcept;
+database_t& database() noexcept;
 ```
 ### lmdb::cursor_t class
 
@@ -695,15 +602,15 @@ lmdbpp classes and methods are tested using Catch2 unit test framework. You can 
 
 ## Caveats using LMDB
 
-* A broken lock file can cause sync issues. Stale reader transactions left behind by an aborted program cause further writes to grow the database quickly, and stale locks can block further operations. To fix this issue check for stale readers periodically using environment_t::check() method.
+* A broken lock file can cause sync issues. Stale reader transactions left behind by an aborted program cause further writes to grow the database quickly, and stale locks can block further operations. To fix this issue check for stale readers periodically using database_t::check() method.
 * Only the database file owner should normally use the database on BSD systems.
 * A thread can only use one transaction at a time. Please see LMDB documentation for more details
-* Use environment_t in the process which started it, without fork()ing
+* Use database_t in the process which started it, without fork()ing
 * Do not open a LMDB database twice in the same process. It breaks flock() advisory locking.
 * Avoid long-lived transactions. Read transactions prevent reuse of pages freeed by newer write transactions, thus the database can grow quickly. Write transactions prevent other write transactions, since writes are serialized.
 * Avoid suspending a process with active transactions. These would then be "long-lived" as aboce.
-* Avoid aborting a process with an active transaction. These would be "long-lived" as above until an environment_t::check() is called for cleanup stale readers.
-* Close the environment once in a while, so the lockfile can get reset.
+* Avoid aborting a process with an active transaction. These would be "long-lived" as above until a database_t::check() is called for cleanup stale readers.
+* Close the database once in a while, so the lockfile can get reset.
 * Do not use LMDB databases on remote filesystems, even between processes on the same host. This breaks flock() advisory locs on some OSes, possibly memory map suunc, and certainly sync between programs on different hosts.
 * Opening a database can fail if another process is opening or closing it at exact same time
 
