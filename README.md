@@ -241,44 +241,14 @@ size_t max_stores() const noexcept;
 max_stores() doesn't return an error. If it cannot obtain the number of stores from the database, it returns zero.
 
 #### database_t::mmap_size() method
-Set the new size of the memory map, or return the memory map size for the database. 
+Return the memory map size for the database. 
 ```C++
 #include "lmdbpp.h"
 
 size_t mmap_size() const noexcept;
-status_t mmap_size(size_t sz) noexcept;
 ```
-mmap_size() without arguments just return the current size of the memory map for the database. This method doesn't return an error. If it cannot obtain the memory map size of the database, it returns zero.
-mmap_size(size_t sz), with a size_t argument, resizes the current memory map. This method returns status_t to indicate the result of the operation.
+mmap_size() returns the current size of the memory map for the database. This method doesn't return an error. If it cannot obtain the memory map size of the database, it returns zero.
 
-Example:
-```C++
-#include "lmdbpp.h"
-#include <iostream>
-
-lmdb::database_t env;
-
-void show_error(const lmdb::status_t& status, const char* method) noexcept
-{
-   std::cout << method << " failed with error " << status.error() << ": " << status.message() << "\n";
-}
-
-int main()
-{
-   lmdb::status_t status = env.initialize(".\\");
-   if (status.ok())
-   {
-      // set the size of the database
-      if (status = env.mmap_size(UINT32_MAX / 4); status.nok()) show_error(status, __func__);
-      std::cout << "mmap_size: " << env.mmap_size() << "\n";
-   }
-   else
-   {
-      show_error(status, __func__);
-   }
-   env.cleanup();
-}
-```
 #### database_t::max_keysize() method
 Return the maximum size of keys and data we can write to an LMDB key/value pair.
 ```C++
