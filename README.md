@@ -67,7 +67,7 @@ lmdbpp implements a simple C++ wrapper around the LMDB C API. lmdbpp exposes cla
 |--|--|
 | lmdb::database_t  | Everything starts with a database, created by call to initialize() method. Each process should have only one database to prevent issues with locking. Call lmdb::database_t class cleanup() method to close and cleanup a database. This lmdb::database_t wraps the operations performed by LMDB environment|
 | lmdb::transaction_t | Once a database is started, a transaction object can be created. Every LMDB operation needs to be performed under a read_write or read_only transaction. begin() method starts a transaction, commit() commits any changes, while abort() reverts any changes |
-| lmdb::store_t | This is equivalent to a table in a SQL database, and perform operations such as get(), put() and del() can be performed with table_t object. In LMDB this object is usually referenced as a DBI |
+| lmdb::store_t | This is equivalent to a table in a SQL database, and perform operations such as get(), put() and del() can be performed with store_t object. In LMDB this object is usually referenced as a DBI |
 | lmdb::cursor_t | After a store is opened or created, a cursor_t object can be created to perform cursor operations such as first(), last(), next(), prior(), seek(), search() and find(), put() and del() |
 | lmdb::status_t | almost all calls to lmdbpp class methods return a status_t object. ok() method returns true if the operation succeeded, while nok() returns true if the operation failed. error() method returns the error code provided ty LMDB, while message() returns an std::string object with the appropriate error message |
 
@@ -147,7 +147,7 @@ int main_f()
    lmdb::status_t status = db.initialize(".\\");
    if (status.ok())
    {
-      // create transaction, tables and perhaps cursors
+      // create transaction, stores and perhaps cursors
    }
    else
    {
@@ -351,7 +351,7 @@ int main()
    if (status.ok())
    {
       lmdb::transaction_t txn(db);
-      // open or create table(s) or a cursor(s)
+      // open or create store(s) or a cursor(s)
       status = txn.begin(transaction_type_t::read_only);
       if (status.nok())
       {
@@ -413,7 +413,7 @@ Return the LMDB database handle pointer.
 
 MDB_env* handle() noexcept;
 ```
-The LMDB database handle pointer is needed when instanciating transaction_t and table_t objects.
+The LMDB database handle pointer is needed when instanciating transaction_t and store_t objects.
 
 #### transaction_t::database() method
 Return the database object associated with this transaction.
@@ -424,27 +424,27 @@ database_t& database() noexcept;
 ```
 
 ### lmdb::store_t class
-mdbpp lmdb::store_t class wraps all the LMDB operations operations. All table operations must be done under transaction control, either a read-only or a read-write transaction. lmdb::transaction_t prevents copying, but a move constructor and move operator are provided to transfer ownwership of a transaction handle. 
+mdbpp lmdb::store_t class wraps all the LMDB operations operations. All store operations must be done under transaction control, either a read-only or a read-write transaction. lmdb::transaction_t prevents copying, but a move constructor and move operator are provided to transfer ownwership of a transaction handle. 
 
-#### table_t() constructor
+#### store_t() constructor
 Construct a lmdb::store_t object and the only parameter is a lmdb::database_t object.
 
 ```C++
 #include "lmdbpp.h"
 
 template <typename KEY, typename VALUE>
-table_base_t(database_t& env) noexcept;
+store_t(database_t& env) noexcept;
 ```
 database_t object passed to the constructor must have been initialized by databa_t::initialize() call. 
 
-#### table_t::create() method
-Open an existing table, or create a new table if one doesn't exist in the database.
+#### store_t::create() method
+Open an existing store, or create a new store if one doesn't exist in the database.
 ```C++
 #include "lmdbpp.h"
 
 status_t create(transaction_t& txn, const std::string& name) noexcept;
 ```
-The transaction object passed as parameter must have been started with a read-write transaction_t::begin() method. The name of the store must not contain a directory path, as the table will be created or opened within the database whose path was specified in database_t::initialize() method. The transaction must be commited for store create to take effect.
+The transaction object passed as parameter must have been started with a read-write transaction_t::begin() method. The name of the store must not contain a directory path, as the store will be created or opened within the database whose path was specified in database_t::initialize() method. The transaction must be commited for store create to take effect.
 
 Example:
 ```C++
@@ -485,23 +485,23 @@ int main()
       show_error(status, __func__);
       return status.error();
    }
-   // perform other table_t or cursor_t operations
+   // perform other store_t or cursor_t operations
    db.cleanup();
    return 0;
 }
 ```
 
-#### table_t::open() method
+#### store_t::open() method
 Open an existing store. If store doesn't exist in the database, an error is returned.
 ```C++
 #include "lmdbpp.h"
 
 status_t open(transaction_t& txn, const std::string& name) noexcept;
 ```
-The transaction object passed as parameter must have been started with a read-write transaction_t::begin() method. The name of the table must be the same name used with a previous table_t::create() call.
+The transaction object passed as parameter must have been started with a read-write transaction_t::begin() method. The name of the store must be the same name used with a previous store_t::create() call.
 
-#### table_t::close() method
-Close a table and release resources.
+#### store_t::close() method
+Close a store and release resources.
 
 ```C++
 #include "lmdbpp.h"
@@ -509,17 +509,17 @@ Close a table and release resources.
 status_t close(transaction_t&) noexcept;
 ```
 
-#### table_t::drop() method
-Delete a table from the database.
+#### store_t::drop() method
+Delete a store from the database.
 ```C++
 #include "lmdbpp.h"
 
 status_t drop(transaction_t& txn) noexcept;
 ```
-A table must be open before you call drop() method, and a read-write transaction must be in effect.
+A store must be open before you call drop() method, and a read-write transaction must be in effect.
 
-#### table_t::get() method
-Retrieve a key/value pair from the table. 
+#### store_t::get() method
+Retrieve a key/value pair from the store. 
 
 ```C++
 #include "lmdbpp.h"
@@ -527,10 +527,10 @@ Retrieve a key/value pair from the table.
 status_t get(transaction_t& txn, key_const_reference target_key, key_reference key, value_reference value) noexcept;
 status_t get(transaction_t& txn, key_const_reference target_key, keyvalue_t& kv) noexcept;
 ```
-The table must be open and you must hav an active read-only or read-write transaction. target_key parameter indicates the key of the key/value pair to be retrieved. table_t::get() returns status with MDB_NOTFOUND error if target_key not found.
+The store must be open and you must hav an active read-only or read-write transaction. target_key parameter indicates the key of the key/value pair to be retrieved. store_t::get() returns status with MDB_NOTFOUND error if target_key not found.
 
-#### table_t::put() method
-Insert or update a key/value pair in the table.
+#### store_t::put() method
+Insert or update a key/value pair in the store.
 
 ```C++
 #include "lmdbpp.h"
@@ -538,10 +538,10 @@ Insert or update a key/value pair in the table.
 status_t put(transaction_t& txn, key_const_reference key, value_const_reference value) noexcept;
 status_t put(transaction_t& txn, keyvalue_t& kv) noexcept;
 ```
-The table must be open and you must have an active read-write transaction.
+The store must be open and you must have an active read-write transaction.
 
-#### table_t::del() method
-Delete a key/value pair from the table.
+#### store_t::del() method
+Delete a key/value pair from the store.
 
 ```C++
 #include "lmdbpp.h"
@@ -549,36 +549,36 @@ Delete a key/value pair from the table.
 status_t del(transaction_t& txn, key_const_reference key, value_const_reference value) noexcept;
 status_t del(transaction_t& txn, const keyvalue_t& kv) noexcept;
 ```
-The table must be open and you must have an active read-write transaction.
+The store must be open and you must have an active read-write transaction.
 
-#### table_t::entries() method
-Retrieve the number of active key/pair entries in the table.
+#### store_t::entries() method
+Retrieve the number of active key/pair entries in the store.
 
 ```C++
 #include "lmdbpp.h"
 
 size_t entries(transaction_t& txn) noexcept;
 ```
-The table must be open and you must pass an active read-only or read-write transaction as parameter.
+The store must be open and you must pass an active read-only or read-write transaction as parameter.
 
-#### table_t::name() method
-Retrieve the name of the table.
+#### store_t::name() method
+Retrieve the name of the store.
 
 ```C++
 #include "lmdbpp.h"
 
 std::string name() const noexcept;
 ```
-#### table_t::handle() method
-Retrieve the LMDB table pointer handle.
+#### store_t::handle() method
+Retrieve the LMDB store pointer handle.
 
 ```C++
 #include "lmdbpp.h"
 
 MDB_dbi handle() const noexcept;
 ```
-#### table_t::database() method
-Retrieve the database object associated with this table.
+#### store_t::database() method
+Retrieve the database object associated with this store.
 
 ```C++
 #include "lmdbpp.h"
