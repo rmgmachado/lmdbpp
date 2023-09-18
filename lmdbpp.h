@@ -797,15 +797,20 @@ namespace lmdb {
          return prior(k);
       }
 
-      status_t seek(key_const_reference target_key) noexcept
+      status_t seek(key_const_reference target_key, value_reference value) noexcept
       {
          key_type k{ target_key };
-         value_type v;
-         if (status_t status = get(k, v, MDB_SET); status.nok())
+         if (status_t status = get(k, value, MDB_SET); status.nok())
          {
             return status;
          }
          return status_t();
+      }
+
+      status_t seek(key_const_reference target_key) noexcept
+      {
+         value_type v;
+         return seek(target_key);
       }
 
       status_t find(key_const_reference& target_key, key_reference key, value_reference value) noexcept
