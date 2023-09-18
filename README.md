@@ -713,17 +713,47 @@ MDB_cursor* handle() noexcept;
 ### lmdb::status_t class
 All methods in lmdbpp return a status_t object to indicate success or failure of a LMDB operation. status_t::ok() method returns true if the operation succeeded, false otherwise. status_t::nok() returns true on failure.
 
-#### status_t constructor
+#### status_t::operator==() and status_t::operator!=() 
+These operators can be use to compare status_t objects.
+```C++
+#include "lmdbpp.h"
 
-#### status_t::operator==() 
+bool operator==(const status_t& other) const noexcept;
+bool operator!=(const status_t& other) const noexcept;
+```
 
 #### status_t::ok() method
+Return true if LMDB operation succeeded.
+```C++
+#include "lmdbpp.h"
+
+bool ok() const noexcept;
+```
 
 #### status_t::nok() method
+Return true if LMDB operation failed.
+```C++
+#include "lmdbpp.h"
+
+bool nok() const noexcept;
+```
 
 #### status_t::error() method
+Return the LMDB error code if an operation failed.
+```C++
+#include "lmdbpp.h"
+
+int error() const noexcept;
+```
 
 #### status_t::message() method
+Return std::string with error message if LMDB operation failed.
+Return true if LMDB operation succeeded.
+```C++
+#include "lmdbpp.h"
+
+std::string message() const noexcept;
+```
 
 ### License
 
