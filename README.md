@@ -555,9 +555,175 @@ Retrieve the database object associated with this store.
 
 database_t& database() noexcept;
 ```
+
 ### lmdb::cursor_t class
+A cursor_t object is associated with a specific transaction_t and store_t objects. A cursor_t cannot be used any more when its parent store_t object has been closed, nor when its transaction has ended.A cursor in a read-write transaction can be closed before its transaction ends, and will otherwise be closed when its transaction ends. A cursor in a read-only transaction must be closed explicitly, before or after its transaction ends. A cursor is used to provide multiple and independent views into a store_t object. cursor_t objects cannot be copied or assigned, but can be moved via a move constructor and a move assignment operator.
+
+#### cursor_t constructor
+Construct a new cursor_t object.
+
+```C++
+#include "lmdbpp.h"
+
+cursor_t(store_t& table) noexcept;
+cursor_t(transaction_t& txn, store_t table);
+```
+The constructor that takes just one store_t argument creates a cursor_t object, which needs to be opened by a call to cursor_t::open() method. On the other hand, the cursor_t constructor that take a transaction_t and store_t objects will create a new cursor_t object and attempts to open the cursor. This two argument constructor will throw an exception error_t if the open operation fails.
+
+#### cursor_t::open() method
+Open a new cursor.
+
+```C++
+#include "lmdbpp.h"
+
+status_t open(transaction_t& txn) noexcept;
+```
+#### cursor_t::close() method
+Close a cursor.
+
+```C++
+#include "lmdbpp.h"
+
+status_t close() noexcept;
+```
+#### cursor_t::current() method
+Return key-value data pair at current cursor position. The cursor position is not changed.
+
+```C++
+#include "lmdbpp.h"
+
+status_t current(key_reference key, value_reference value) noexcept;
+status_t current(key_reference key) noexcept;
+```
+The current method return the key-value data pair at current cursor position, while the sing argument cursor_t::current() method retrieves only the key at current cursor position.
+
+#### cursor_t::first() method
+Position cursor at first key-value data pair in a store.
+
+```C++
+#include "lmdbpp.h"
+
+status_t first(key_reference key, value_reference value) noexcept;
+status_t first(key_reference key) noexcept;
+status_t first() noexcept;
+```
+If the store contains no records first() methods will return status_t with MDB_NOTFOUND error.
+#### cursor_t::last() method
+Position the cursor at the last key-value data pair in a store.
+```C++
+#include "lmdbpp.h"
+
+status_t last(key_reference key, value_reference value) noexcept;
+status_t last(key_reference key) noexcept;
+status_t last() noexcept;
+```
+If the store contains no records last() methods will return status_t with MDB_NOTFOUND error.
+
+#### cursor_t::next() method
+Position the cursor at the next key-value data pair in a store.
+```C++
+#include "lmdbpp.h"
+
+status_t last(key_reference key, value_reference value) noexcept;
+status_t last(key_reference key) noexcept;
+status_t last() noexcept;
+```
+If the cursor is already at the last record of a store, next() methods will return status_t with MDB_NOTFOUND error.
+
+#### cursor_t::prior() method
+Position the cursor at the previous key-value data pair in a store.
+```C++
+#include "lmdbpp.h"
+
+status_t prior(key_reference key, value_reference value) noexcept;
+status_t prior(key_reference key) noexcept;
+status_t prior() noexcept;
+```
+If the cursor is already at the first record of a store, prior() methods will return status_t with MDB_NOTFOUND error.
+
+#### cursor_t::seek() method
+Position the cursor at the specified target key.
+
+```C++
+#include "lmdbpp.h"
+
+status_t seek(key_const_reference target_key) noexcept;
+status_t seek(key_const_reference target_key, value_reference) noexcept;
+```
+Position the cursor at the specified target_key. If the target_key is not present in the store_t object, seek() methods return status_t with MDB_NOTFOUND error.
+
+#### cursor_t::find() method
+Position the cursor at specified target_key and retrieve the key and the value.
+```C++
+#include "lmdbpp.h"
+
+status_t find(key_const_reference target_key, key_reference key, value_reference) noexcept;
+```
+Position the cursor at the specified target_key. If the target_key is not present in the store_t object, find() methods return status_t with MDB_NOTFOUND error.
+
+#### cursor_t::search() method
+Position the cursor at first key greater than or equal to the target_key, and retrieve both key and value at the cursor postion.
+```C++
+#include "lmdbpp.h"
+
+status_t search(key_const_reference target_key, key_reference key, value_reference) noexcept;
+```
+If the target_key is not present in the store_t object, find() methods return status_t with MDB_NOTFOUND error.
+#### cursor_t::put() method
+Add new record, or update existing record in store.
+```C++
+#include "lmdbpp.h"
+
+status_t put(key_const_reference key, key_reference key, value_const_reference) noexcept;
+```
+put() method can only be called if the cursor_t object was opened with a read-write transaction.
+
+#### cursor_t::del() method
+Remove an existing record from store at the current cursor position.
+```C++
+#include "lmdbpp.h"
+
+status_t del() noexcept;
+```
+del() method can only be called if the cursor_t object was opened with a read-write transaction.
+
+#### cursor_t::database() method
+Retrieve the database_t object for this cursor.
+```C++
+#include "lmdbpp.h"
+
+database_t& database() noexcept;
+```
+
+#### cursor_t::store() method
+Retrieve the store_t object for this cursor.
+```C++
+#include "lmdbpp.h"
+
+store_t& store() noexcept;
+```
+#### cursor_t::handle() method
+Retrieve the LMDB native handle for this cursor object.
+```C++
+#include "lmdbpp.h"
+
+MDB_cursor* handle() noexcept;
+```
 
 ### lmdb::status_t class
+All methods in lmdbpp return a status_t object to indicate success or failure of a LMDB operation. status_t::ok() method returns true if the operation succeeded, false otherwise. status_t::nok() returns true on failure.
+
+#### status_t constructor
+
+#### status_t::operator==() 
+
+#### status_t::ok() method
+
+#### status_t::nok() method
+
+#### status_t::error() method
+
+#### status_t::message() method
 
 ### License
 
