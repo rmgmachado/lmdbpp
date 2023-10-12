@@ -53,7 +53,7 @@ References: [LMDB source code Github][lmdb source], [LMDB documentation link][lm
 * Can store live pointer-bases objects directly
 
 ### LMDB Performance
-The charts below how the performance of LMDB, represented by the MDB collumn, when compared to similar key/value store databases:
+The charts below how the performance of LMDB, represented by the MDB collumn, when compared to similar key/value store databases. The charts shown below extracted from Howard Chu presentations and from Syma Corporation's [In-Memory Microbenchmark](http://www.lmdb.tech/bench/inmem/) and [Database Microbenchmarks](http://www.lmdb.tech/bench/microbench/):
 
 <img src="https://github.com/rmgmachado/lmdbpp/blob/main/graphs/lmdb-read-performance-sr.png" width="700" height="300" border="10"/>
 <img src="https://github.com/rmgmachado/lmdbpp/blob/main/graphs/lmdb-read-performance-lr.png" width="700" height="300" border="10"/>
