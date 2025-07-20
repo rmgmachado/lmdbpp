@@ -27,450 +27,170 @@
 #define CATCH_CONFIG_MAIN
 #include <catch.hpp>
 #include <vector>
+#include <iostream>
 #include "lmdbpp.h"
 
-using namespace lmdb;
+TEST_CASE("Current directory", "[curdir]")
+{
+   std::cerr << "Current directory: " << std::filesystem::current_path() << "\n";
+}
 
 TEST_CASE("lmdbpp.h environment_t class tests", "[environment_t]")
 {
    SECTION("Test enviroment_t default constructor and destructor")
    {
-      database_t env;
-      REQUIRE(env.handle() == nullptr);
-      REQUIRE(env.path().size() == 0);
-      REQUIRE(env.path() == "");
-      REQUIRE(env.max_readers() == 0);
-      REQUIRE(env.max_keysize() == 0);
-      REQUIRE(env.max_stores() == 0);
+      lmdb::env_t env;
+      REQUIRE(env.handle() != nullptr);
+      REQUIRE(env.lasterror());
+      REQUIRE(env.maxdbs() == lmdb::DEFAULT_MAXDBS);
+      REQUIRE(env.maxreaders() == lmdb::DEFAULT_MAXREADERS);
+      REQUIRE(env.mmapsize() == lmdb::DEFAULT_MMAPSIZE);
+      REQUIRE(env.mode() == lmdb::DEFAULT_MODE);
+      REQUIRE(env.maxkeysize() == 511);
+      REQUIRE(env.path().empty());
+      REQUIRE(env.check() == -1);
+      REQUIRE(env.flush() == EINVAL);
+      REQUIRE((env.maxdbs(100) && env.maxdbs() == 100));
+      REQUIRE((env.maxreaders(101) && env.maxreaders() == 101));
+      REQUIRE((env.mmapsize(1024 * 1024) && env.mmapsize() == 1024 * 1024));
+      REQUIRE((env.mode(0600) && env.mode() == 0600));
    }
    SECTION("test environment_t move constructor")
    {
-      // before the move
-      std::string path(".\\");
-      database_t env;
-      REQUIRE(env.initialize(path).ok());
-      REQUIRE(env.handle() != nullptr);
-      REQUIRE(env.path().size() == path.size());
-      REQUIRE(env.path() == path);
-      REQUIRE(env.max_stores() == DEFAULT_MAXSTORES);
+      lmdb::env_t srcenv;
+      REQUIRE(srcenv.lasterror());
+      REQUIRE((srcenv.maxdbs(100) && srcenv.maxdbs() == 100));
+      REQUIRE((srcenv.maxreaders(101) && srcenv.maxreaders() == 101));
+      REQUIRE((srcenv.mmapsize(1024 * 1024) && srcenv.mmapsize() == 1024 * 1024));
+      REQUIRE((srcenv.mode(0600) && srcenv.mode() == 0600));
 
-      database_t env1{ std::move(env) };
-      REQUIRE(env1.handle() != nullptr);
-      REQUIRE(env1.path().size() == path.size());
-      REQUIRE(env1.path() == path);
-      REQUIRE(env1.max_stores() == DEFAULT_MAXSTORES);
-
-      REQUIRE(env.handle() == nullptr);
-      REQUIRE(env.path().size() == 0);
-      REQUIRE(env.path() == "");
-      REQUIRE(env.max_stores() == 0);
+      lmdb::env_t dstenv{ std::move(srcenv) };
+      REQUIRE(dstenv.lasterror());
+      REQUIRE((dstenv.maxdbs(100) && dstenv.maxdbs() == 100));
+      REQUIRE((dstenv.maxreaders(101) && dstenv.maxreaders() == 101));
+      REQUIRE((dstenv.mmapsize(1024 * 1024) && dstenv.mmapsize() == 1024 * 1024));
+      REQUIRE((dstenv.mode(0600) && dstenv.mode() == 0600));
    }
    SECTION("test environment_t move operator")
    {
-      // before the move
-      std::string path(".\\");
-      database_t env;
-      REQUIRE(env.initialize(path).ok());
-      REQUIRE(env.handle() != nullptr);
-      REQUIRE(env.path().size() == path.size());
-      REQUIRE(env.path() == path);
-      REQUIRE(env.max_stores() == DEFAULT_MAXSTORES);
+      lmdb::env_t srcenv;
+      REQUIRE(srcenv.lasterror());
+      REQUIRE((srcenv.maxdbs(100) && srcenv.maxdbs() == 100));
+      REQUIRE((srcenv.maxreaders(101) && srcenv.maxreaders() == 101));
+      REQUIRE((srcenv.mmapsize(1024 * 1024) && srcenv.mmapsize() == 1024 * 1024));
+      REQUIRE((srcenv.mode(0600) && srcenv.mode() == 0600));
 
-      database_t env1;
-      env1 = std::move(env);
-      REQUIRE(env1.handle() != nullptr);
-      REQUIRE(env1.path().size() == path.size());
-      REQUIRE(env1.path() == path);
-      REQUIRE(env1.max_stores() == DEFAULT_MAXSTORES);
+      lmdb::env_t dstenv;
+      REQUIRE(dstenv.lasterror());
+      REQUIRE((dstenv.maxdbs(100) && dstenv.maxdbs() == 100));
+      REQUIRE((dstenv.maxreaders(101) && dstenv.maxreaders() == 101));
+      REQUIRE((dstenv.mmapsize(1024 * 1024) && dstenv.mmapsize() == 1024 * 1024));
+      REQUIRE((dstenv.mode(0600) && dstenv.mode() == 0600));
 
-      REQUIRE(env.handle() == nullptr);
-      REQUIRE(env.path().size() == 0);
-      REQUIRE(env.path() == "");
-      REQUIRE(env.max_stores() == 0);
+      dstenv = std::move(srcenv);
+      REQUIRE(dstenv.lasterror());
+      REQUIRE((dstenv.maxdbs(100) && dstenv.maxdbs() == 100));
+      REQUIRE((dstenv.maxreaders(101) && dstenv.maxreaders() == 101));
+      REQUIRE((dstenv.mmapsize(1024 * 1024) && dstenv.mmapsize() == 1024 * 1024));
+      REQUIRE((dstenv.mode(0600) && dstenv.mode() == 0600));
    }
-   SECTION("test environment_t flush() method")
+   SECTION("test environment_t open() default flags")
    {
-      std::string path(".\\");
-      database_t env;
-      REQUIRE(env.initialize(path).ok());
-      REQUIRE(env.handle() != nullptr);
-      REQUIRE(env.flush().ok());
-   }
-}
-
-TEST_CASE("lmdbpp.h transaction_t class tests", "[transaction_t]")
-{
-   std::string path(".\\");
-   database_t env;
-   REQUIRE(env.initialize(path).ok());
-   REQUIRE(env.handle() != nullptr);
-
-   SECTION("Test transaction_t constructor")
-   {
-      transaction_t txn(env);
-      REQUIRE(txn.handle() == nullptr);
-   }
-   SECTION("Test transaction_t begin() method with transaction_type_t::read_write")
-   {
-      transaction_t txn(env);
-      REQUIRE(txn.handle() == nullptr);
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      REQUIRE(txn.handle() != nullptr);
-   }
-   SECTION("Test transaction_t begin() method with transaction_type_t::read_only")
-   {
-      transaction_t txn(env);
-      REQUIRE(txn.handle() == nullptr);
-      REQUIRE(txn.begin(transaction_type_t::read_only).ok());
-      REQUIRE(txn.handle() != nullptr);
-   }
-   SECTION("Test transaction_t commit() method with transaction_type_t::read_write")
-   {
-      transaction_t txn(env);
-      REQUIRE(txn.handle() == nullptr);
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      REQUIRE(txn.handle() != nullptr);
-      REQUIRE(txn.commit().ok());
-      REQUIRE(txn.handle() == nullptr);
-   }
-   SECTION("Test transaction_t commit() method with transaction_type_t::read_only")
-   {
-      transaction_t txn(env);
-      REQUIRE(txn.handle() == nullptr);
-      REQUIRE(txn.begin(transaction_type_t::read_only).ok());
-      REQUIRE(txn.handle() != nullptr);
-      REQUIRE(txn.commit().ok());
-      REQUIRE(txn.handle() == nullptr);
-   }
-   SECTION("Test transaction_t abort() method with transaction_type_t::read_write")
-   {
-      transaction_t txn(env);
-      REQUIRE(txn.handle() == nullptr);
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      REQUIRE(txn.handle() != nullptr);
-      REQUIRE(txn.abort().ok());
-      REQUIRE(txn.handle() == nullptr);
-   }
-   SECTION("Test transaction_t abort() method with transaction_type_t::read_only")
-   {
-      transaction_t txn(env);
-      REQUIRE(txn.handle() == nullptr);
-      REQUIRE(txn.begin(transaction_type_t::read_only).ok());
-      REQUIRE(txn.handle() != nullptr);
-      REQUIRE(txn.abort().ok());
-      REQUIRE(txn.handle() == nullptr);
-   }
-}
-
-template <typename T>
-bool equal(const T& lhs, MDB_val* rhs)
-{
-   if (!rhs) return false;
-   if (lhs.size() != rhs->mv_size) return false;
-   return memcmp(&lhs[0], rhs->mv_data, rhs->mv_size) == 0;
-}
-
-TEST_CASE("lmdbpp.h data_t class tests", "[data_t]")
-{
-   SECTION("Test data_t default constructor")
-   {
-      data_t dt;
-      REQUIRE(dt.size() == 0);
-      REQUIRE(dt.data()->mv_data == nullptr);
-   }
-   SECTION("Test data_t constructor")
-   {
-      std::string str{ "This is a string" };
-      data_t dt(str);
-      REQUIRE(dt.size() == str.size());
-      REQUIRE(equal(str, dt.data()));
-   }
-   SECTION("Test data_t get() method")
-   {
-      std::string str{ "This is a string" };
-      data_t dt(str);
-      REQUIRE(dt.size() == str.size());
-      REQUIRE(equal(str, dt.data()));
-      std::string str1;
-      dt.get(str1);
-      REQUIRE(str == str1);
-   }
-   SECTION("Test data_t get() method when data_t size is 0")
-   {
-      std::string str{ "This is a string" };
-      data_t dt;
-      REQUIRE(dt.size() ==0);
-      REQUIRE(dt.data()->mv_data == nullptr);
-      dt.get(str);
-      REQUIRE(str == "");
-      REQUIRE(str.size() == 0);
-   }
-   SECTION("Test data_t set() method")
-   {
-      std::string str{ "This is a string" };
-      data_t dt;
-      REQUIRE(dt.size() == 0);
-      REQUIRE(dt.data()->mv_data == nullptr);
-      dt.set(str);
-      REQUIRE(dt.size() == str.size());
-      REQUIRE(equal(str, dt.data()));
-   }
-   SECTION("Test data_t set() method when string is empty")
-   {
-      std::string str;
-      data_t dt;
-      REQUIRE(dt.size() == 0);
-      REQUIRE(dt.data()->mv_data == nullptr);
-      dt.set(str);
-      REQUIRE(dt.size() == str.size());
-      REQUIRE(dt.data()->mv_data == nullptr);
-   }
-}
-
-TEST_CASE("lmdbpp.h table_t class tests", "[table_t]")
-{
-   std::string path(".\\");
-   database_t env;
-   REQUIRE(env.initialize(path).ok());
-   REQUIRE(env.handle() != nullptr);
-   transaction_t txn(env);
-
-   SECTION("Test table_ constructor")
-   {
-      store_t tb(env);
-      REQUIRE(tb.handle() == 0);
-   }
-   SECTION("Test table_t create() method")
-   {
-      std::string path{ "test.dbm" };
-      store_t tb(env);
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      REQUIRE(tb.create(txn, path).ok());
-   }
-   SECTION("Test table_t put() and get() methods")
-   {
-      std::vector<std::pair<const char*, const char*>> data =
+      namespace fs = std::filesystem;
+      lmdb::env_t env(MDB_EPHEMERAL);
+      auto rc = env.open();
+      REQUIRE(rc);
+      if (rc)
       {
-           { "first", "first record" }
-         , { "second", "second record" }
-         , { "third", "third record" } 
-      };
-      std::string path{ "test.dbm" };
-      store_t tb(env);
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      REQUIRE(tb.create(txn, path).ok());
-      REQUIRE(txn.commit().ok());
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      for (auto [key, value] : data)
-      {
-         REQUIRE(tb.put(txn, key, value).ok());
-         std::string k{key}, v;
-         REQUIRE(tb.get(txn, k, k, v).ok());
-         REQUIRE(k == key);
-         REQUIRE(v == value);
+         REQUIRE(env.handle() != nullptr);
+         REQUIRE(env.isopen());
+         REQUIRE(env.getflags() == MDB_EPHEMERAL);
+         REQUIRE(env.maxdbs() == lmdb::DEFAULT_MAXDBS);
+         REQUIRE(env.maxreaders() == lmdb::DEFAULT_MAXREADERS);
+         REQUIRE(env.mmapsize() == lmdb::DEFAULT_MMAPSIZE);
+         REQUIRE(env.mode() == lmdb::DEFAULT_MODE);
+         REQUIRE(env.maxkeysize() == 511);
+         REQUIRE(env.path() == std::filesystem::current_path());
+         REQUIRE(env.check() == 0);
+         REQUIRE(env.flush() == 0);
+         env.close();
+         REQUIRE(!env.exist());
+
       }
-      REQUIRE(tb.drop(txn).ok());
-      REQUIRE(txn.commit().ok());
-   }
-   SECTION("Test table_t del()")
-   {
-      std::vector<std::pair<std::string, std::string>> data =
+      else
       {
-           { "first", "first record" }
-         , { "second", "second record" }
-         , { "third", "third record" }
-      };
-      std::string path{ "test.dbm" };
-      store_t tb(env);
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      REQUIRE(tb.create(txn, path).ok());
-      for (auto [key, value] : data)
-      {
-         REQUIRE(tb.put(txn, key, value).ok());
-         std::string k{ key }, v;
-         REQUIRE(tb.get(txn, k, k, v).ok());
-         REQUIRE(k == key);
-         REQUIRE(v == value);
+         REQUIRE(!env.isopen());
+         REQUIRE(env.handle() == nullptr);
       }
-      REQUIRE(tb.del(txn, data[1].first, data[1].second).ok());
-      REQUIRE(tb.get(txn, data[1].first, data[1].first, data[1].second).nok());
-      REQUIRE(tb.drop(txn).ok());
-      REQUIRE(txn.commit().ok());
    }
-   SECTION("Test table_t entries() method")
+   SECTION("test environment_t open() with flags MDB_RDONLY and MDB_NOLOCK")
    {
-      std::vector<std::pair<std::string, std::string>> data =
+      namespace fs = std::filesystem;
+      lmdb::env_t env;
+      // create the environment with default arguments
+      auto rc = env.open();
+      REQUIRE(rc);
+      if (rc)
       {
-           { "first", "first record" }
-         , { "second", "second record" }
-         , { "third", "third record" }
-      };
-      std::string path{ "test.dbm" };
-      store_t tb(env);
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      REQUIRE(tb.create(txn, path).ok());
-      for (auto [key, value] : data)
-      {
-         REQUIRE(tb.put(txn, key, value).ok());
-         std::string k{ key }, v;
-         REQUIRE(tb.get(txn, k, k, v).ok());
-         REQUIRE(k == key);
-         REQUIRE(v == value);
+         REQUIRE(env.handle() != nullptr);
+         REQUIRE(env.isopen());
+         REQUIRE(env.exist());
+         REQUIRE(rc);
+         env.close();
       }
-      REQUIRE(tb.entries(txn) == data.size());
-      REQUIRE(tb.drop(txn).ok());
-      REQUIRE(txn.commit().ok());
+      // now the environment files have been created, reopen them with MDB_RDONLY
+      REQUIRE(env.setflags(MDB_RDONLY, MDB_NOLOCK, MDB_EPHEMERAL));
+      rc = env.open();
+      if (rc)
+      {
+         REQUIRE(env.handle() != nullptr);
+         REQUIRE(env.isopen());
+         REQUIRE(env.exist());
+         REQUIRE(env.getflags() == (MDB_RDONLY | MDB_NOLOCK | MDB_EPHEMERAL));
+         REQUIRE(env.maxdbs() == lmdb::DEFAULT_MAXDBS);
+         REQUIRE(env.maxreaders() == lmdb::DEFAULT_MAXREADERS);
+         REQUIRE(env.mmapsize() == lmdb::DEFAULT_MMAPSIZE);
+         REQUIRE(env.mode() == lmdb::DEFAULT_MODE);
+         REQUIRE(env.maxkeysize() == 511);
+         REQUIRE(env.path() == std::filesystem::current_path());
+         REQUIRE(env.check() == 0);
+         env.close();
+         REQUIRE(!env.exist());
+      }
+      else
+      {
+         REQUIRE(!env.isopen());
+         REQUIRE(env.handle() == nullptr);
+      }
    }
-}
-
-using dataset_t = std::vector<std::pair<std::string, std::string>>;
-
-status_t populate(transaction_t& txn, store_t& tbl, const dataset_t& ds) noexcept
-{
-   status_t status;
-   for (auto item : ds)
+   SECTION("test environment_t open() with flags MDB_NOSUBDIR")
    {
-      if (status = tbl.put(txn, item.first, item.second); status.nok()) return status;
-   }
-   return status;
-}
-
-TEST_CASE("lmdbpp.h cursor_t class tests", "[cursor_t]")
-{
-   dataset_t data =
-   {
-        { "first", "first record" }
-      , { "second", "second record" }
-      , { "third", "third record" }
-   };
-
-   std::string path(".\\");
-   database_t env;
-   REQUIRE(env.initialize(path).ok());
-   REQUIRE(env.handle() != nullptr);
-   transaction_t txn(env);
-   REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-   store_t tb(env);
-   REQUIRE(tb.create(txn, path).ok());
-   REQUIRE(populate(txn, tb, data).ok());
-   REQUIRE(txn.commit().ok());
-   REQUIRE(txn.begin(transaction_type_t::read_only).ok());
-
-   SECTION("Test cursor_t class first() method")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.first(key, value).ok());
-      REQUIRE((key == data[0].first && value == data[0].second));
-   }
-   SECTION("Test cursor_t class first() method key only")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key;
-      REQUIRE(cursor.first(key).ok());
-      REQUIRE(key == data[0].first);
-   }
-   SECTION("Test cursor_t class last() method")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.last(key, value).ok());
-      REQUIRE((key == data[2].first && value == data[2].second));
-   }
-   SECTION("Test cursor_t class last() method key only")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key;
-      REQUIRE(cursor.last(key).ok());
-      REQUIRE(key == data[2].first);
-   }
-   SECTION("Test cursor_t class next() method")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.first(key, value).ok());
-      REQUIRE((key == data[0].first && value == data[0].second));
-      REQUIRE(cursor.next(key, value).ok());
-      REQUIRE((key == data[1].first && value == data[1].second));
-      REQUIRE(cursor.last(key, value).ok());
-      REQUIRE((key == data[2].first && value == data[2].second));
-      REQUIRE(cursor.next(key, value).nok());
-   }
-   SECTION("Test cursor_t class next() method key only")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.first(key, value).ok());
-      REQUIRE((key == data[0].first && value == data[0].second));
-      REQUIRE(cursor.next(key).ok());
-      REQUIRE(key == data[1].first);
-      REQUIRE(cursor.last().ok());
-      REQUIRE(cursor.next().nok());
-   }
-   SECTION("Test cursor_t class prior() method")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.last(key, value).ok());
-      REQUIRE((key == data[2].first && value == data[2].second));
-      REQUIRE(cursor.prior(key, value).ok());
-      REQUIRE((key == data[1].first && value == data[1].second));
-      REQUIRE(cursor.first(key, value).ok());
-      REQUIRE((key == data[0].first && value == data[0].second));
-      REQUIRE(cursor.prior(key, value).nok());
-   }
-   SECTION("Test cursor_t class prior() method key only")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.last(key, value).ok());
-      REQUIRE((key == data[2].first && value == data[2].second));
-      REQUIRE(cursor.prior(key).ok());
-      REQUIRE(key == data[1].first);
-   }
-   SECTION("Test cursor_t class find() method")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.find(data[1].first, key, value).ok());
-      REQUIRE((key == data[1].first && value == data[1].second));
-   }
-   SECTION("Test cursor_t class search() method")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.search("m", key, value).ok());
-      REQUIRE((key == data[1].first && value == data[1].second));
-   }
-   SECTION("Test cursor_t class seek() method")
-   {
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.seek(data[1].first).ok());
-      REQUIRE(cursor.current(key, value).ok());
-      REQUIRE((key == data[1].first && value == data[1].second));
-   }
-   SECTION("Test cursor_t class put() method")
-   {
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      cursor_t cursor(txn, tb);
-      std::pair<std::string, std::string> val = { "forth", "fourth record" };
-      std::string key{ val.first }, value{ val.second };
-      REQUIRE(cursor.put(key, value).ok());
-      REQUIRE((key == val.first && value == val.second));
-      REQUIRE(cursor.find(val.first, key, value).ok());
-      REQUIRE((key == val.first && value == val.second));
-   }
-   SECTION("Test cursor_t class del() method")
-   {
-      REQUIRE(txn.begin(transaction_type_t::read_write).ok());
-      cursor_t cursor(txn, tb);
-      std::string key, value;
-      REQUIRE(cursor.first(key, value).ok());
-      REQUIRE((key == data[0].first && value == data[0].second));
-      REQUIRE(cursor.del().ok());
-      REQUIRE(cursor.first(key, value).ok());
-      REQUIRE((key == data[1].first && value == data[1].second));
+      namespace fs = std::filesystem;
+      lmdb::env_t env;
+      REQUIRE(env.setflags(MDB_NOSUBDIR, MDB_EPHEMERAL));
+      auto rc = env.open();
+      REQUIRE(rc);
+      if (rc)
+      {
+         REQUIRE(env.handle() != nullptr);
+         REQUIRE(env.isopen());
+         REQUIRE(env.exist());
+         REQUIRE(env.getflags() == (MDB_NOSUBDIR | MDB_EPHEMERAL));
+         REQUIRE(env.maxdbs() == lmdb::DEFAULT_MAXDBS);
+         REQUIRE(env.maxreaders() == lmdb::DEFAULT_MAXREADERS);
+         REQUIRE(env.mmapsize() == lmdb::DEFAULT_MMAPSIZE);
+         REQUIRE(env.mode() == lmdb::DEFAULT_MODE);
+         REQUIRE(env.maxkeysize() == 511);
+         REQUIRE((env.path() == std::filesystem::current_path() / "lmdb.mdb"));
+         REQUIRE(env.check() == 0);
+         env.close();
+         REQUIRE(!env.exist());
+      }
+      else
+      {
+         REQUIRE(!env.isopen());
+         REQUIRE(env.handle() == nullptr);
+      }
    }
 }
 

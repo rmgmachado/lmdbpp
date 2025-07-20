@@ -26,167 +26,616 @@
 \*****************************************************************************/
 #pragma once
 
-#include <lmdb.h>
+#include "lmdb.h"
+
 #include <string>
+#include <vector>
 #include <string_view>
 #include <utility>
 #include <stdexcept>
+#include <filesystem>
+#include <cstdint>
 #include <cstring>
 
 namespace lmdb {
    
-   constexpr int DEFAULT_MODE = 00644;
-   constexpr unsigned int DEFAULT_MAXSTORES = 128;
-   constexpr unsigned int DEFAULT_MAXREADERS = 126;
-   constexpr size_t DEFAULT_MMAPSIZE = 10485760;
-
-   enum class transaction_type_t { read_write, read_only, none };
-
-   constexpr int MDB_ALREADY_OPEN = MDB_LAST_ERRCODE + 1;
-   constexpr int MDB_NOT_OPEN = MDB_LAST_ERRCODE + 2;
-   constexpr int MDB_TRANSACTION_HANDLE_NULL = MDB_LAST_ERRCODE + 3;
-   constexpr int MDB_TRANSACTION_ALREADY_STARTED = MDB_LAST_ERRCODE + 4;
-   constexpr int MDB_INVALID_TRANSACTION_TYPE = MDB_LAST_ERRCODE + 5;
-
-   class status_t
+   // error_t: Lightweight LMDB error wrapper.
+   //
+   // This class encapsulates an LMDB status/error code (int) and provides
+   // convenience methods for checking success/failure and retrieving the
+   // corresponding error message.
+   //
+   // Features:
+   // - Default-constructs to MDB_SUCCESS (no error).
+   // - Implicit conversion to bool: true if no error.
+   // - Implicit conversion to int: returns the raw error code.
+   // - Provides .ok() to check for success.
+   // - Provides .message() to get a human-readable error string via mdb_strerror().
+   //
+   // Example:
+   //
+   //   error_t err = some_lmdb_call();
+   //   if (!err) {
+   //       std::cerr << "Error: " << err.message() << "\n";
+   //   }
+   class error_t
    {
-      int error_{ MDB_SUCCESS };
+      int code_{ MDB_SUCCESS };
 
    public:
-      status_t() = default;
-      status_t(const status_t&) = default;
-      status_t(status_t&&) noexcept = default;
-      status_t& operator=(const status_t&) = default;
-      status_t& operator=(status_t&&) = default;
+      error_t() = default;
+      ~error_t() = default;
+      error_t(const error_t&) = default;
+      error_t(error_t&&) noexcept = default;
+      error_t& operator=(const error_t&) = default;
+      error_t& operator=(error_t&&) noexcept = default;
 
-      explicit status_t(int retcode) noexcept
-         : error_{ retcode }
-      {}
-
-      status_t& operator=(int retcode) noexcept
+      explicit error_t(int code) noexcept
+         : code_(code)
       {
-         error_ = retcode;
-         return *this;
       }
 
-      bool operator==(const status_t& other) const noexcept
+      [[nodiscard]] bool ok() const noexcept
       {
-         return error_ == other.error_;
+         return code_ == MDB_SUCCESS;
       }
 
-      bool operator!=(const status_t& other) const noexcept
-
+      [[nodiscard]] int code() const noexcept
       {
-         return error_ != other.error_;
+         return code_;
       }
 
-      bool ok() const noexcept { return error_ == MDB_SUCCESS; }
-      bool nok() const noexcept { return error_ != MDB_SUCCESS; }
-      int error() const noexcept { return error_; }
-
-      std::string message() const noexcept
+      [[nodiscard]] operator bool() const noexcept
       {
-         switch (error_)
-         {
-         case MDB_SUCCESS: return "Success";
-         case MDB_ALREADY_OPEN: return "Table or cursor already open";
-         case MDB_NOT_OPEN: return "Table or cursor not open";
-         case MDB_TRANSACTION_HANDLE_NULL: return "Transaction handle not initialized";
-         case MDB_TRANSACTION_ALREADY_STARTED: return "Transaction already started";
-         case MDB_INVALID_TRANSACTION_TYPE: return "Invalid transaction type";
-         }
-         return mdb_strerror(error_);
+         return ok();
+      }
+
+      [[nodiscard]] operator int() const noexcept
+      {
+         return code_;
+      }
+
+      [[nodiscard]] std::string message() const
+      {
+         return make_msg(code_);
+      }
+
+   private:
+      static std::string make_msg(int code)
+      {
+         const char* msg = mdb_strerror(code);
+         return msg ? std::string(msg) : "Unknown error code";
       }
    };
 
-   class error_t : public std::runtime_error
+   // lmdb_error: Exception class for LMDB errors.
+   //
+   // This class derives from std::runtime_error and represents an LMDB-specific
+   // error. It stores the original LMDB error code and generates a descriptive
+   // message using mdb_strerror().
+   //
+   // Features:
+   // - Constructible from an LMDB error code or from an error_t object.
+   // - Stores the integer error code for later inspection via .code().
+   // - Generates a default error message unless one is explicitly provided.
+   //
+   // Example:
+   //
+   //   int rc = mdb_txn_commit(txn);
+   //   if (rc != MDB_SUCCESS) {
+   //       throw lmdb_error(rc);
+   //   }
+   //
+   //   try {
+   //       // ...
+   //   } catch (const lmdb_error& e) {
+   //       std::cerr << "LMDB error: " << e.what() << " (code: " << e.code() << ")\n";
+   //   }
+   class lmdb_error : public std::runtime_error
    {
-      status_t status_;
+      int err_{ MDB_SUCCESS };
 
    public:
-      error_t() = delete;
-      error_t(const status_t& status)
-         : runtime_error(status.message().c_str())
+      explicit lmdb_error(int err)
+         : std::runtime_error{ make_msg(err) }
+         , err_(err) 
+      {}
+      
+      lmdb_error(int err, const std::string& msg)
+         : std::runtime_error(msg), err_(err) 
       {}
 
-      int error() const { return status_.error(); }
-      status_t status() const { return status_; }
+      lmdb_error(const error_t& errc)
+         : std::runtime_error(errc.message()), err_(errc.code())
+      {}
+
+      [[nodiscard]] int code() const noexcept
+      { 
+         return err_; 
+      }
+
+   private:
+      static std::string make_msg(int code)
+      {
+         const char* msg = mdb_strerror(code);
+         return msg ? std::string(msg) : "Unknown error code";
+      }
    };
 
-   class database_t
+   // Common default values used by env_t class
+   // High bits reserved for lmdbpp custom flags
+   #define MDB_EPHEMERAL   0x10000000  // delete files on close()
+
+   inline static constexpr mdb_mode_t DEFAULT_MODE = 0644; /* -rw-r--r-- */
+   inline static constexpr unsigned int DEFAULT_MAXDBS = 128;
+   inline static constexpr unsigned int DEFAULT_MAXREADERS = 512;
+   inline static constexpr size_t DEFAULT_MMAPSIZE = 2ULL * 1024 * 1024 * 1024; // 2 GiB
+   inline static constexpr const char* DEFAULT_NAME = "lmdb.mdb";
+
+   // env_t: RAII-based LMDB environment manager.
+   //
+   // This class encapsulates the creation, configuration, and lifecycle of an LMDB
+   // environment (`MDB_env*`). It provides a safe and flexible interface for setting
+   // up the environment, opening it, managing its parameters, and cleaning up resources.
+   //
+   // Features:
+   // * Full RAII management: environment is automatically closed and cleaned up
+   // * Configurable before opening: max DBs, max readers, mmap size, file mode, flags
+   // * Moveable but non-copyable
+   // * Supports both directory-based and single-file environments (via MDB_NOSUBDIR)
+   // * Integrates with error_t for safe, explicit error handling
+   // * Supports ephemeral environments (custom MDB_EPHEMERAL flag) that delete files on close
+   // * Allows manual flushing, reader checks, and stale reader cleanup
+   //
+   // Usage:
+   //   env_t env(MDB_NOSUBDIR, MDB_NOSYNC);
+   //   env.path("mydb.mdb");
+   //   env.maxdbs(10);
+   //   env.mmapsize(1ull << 30); // 1 GiB
+   //   if (!env.open()) {
+   //       std::cerr << "Failed to open LMDB env: " << env.lasterror().message() << "\n";
+   //   }
+   //
+   // Notes:
+   // * If MDB_RDONLY is used, the target LMDB file(s) must already exist
+   // * The `open()` function must be called after setting configuration parameters
+   // * `close()` releases resources and deletes files if MDB_EPHEMERAL is set
+   // * Use `exist()` to check for presence of LMDB files
+   //
+   // File layout:
+   // * If using directories (default): path must point to an existing directory
+   //   and LMDB will create `data.mdb` and `lock.mdb` inside it
+   // * If using MDB_NOSUBDIR: path should point to a single LMDB file
+   class env_t
    {
       MDB_env* envptr_{ nullptr };
-      size_t max_store_{ 0 };
-      size_t mmap_size_{ 0 };
+      bool isopen_{ false };
+      MDB_dbi maxdbs_{ DEFAULT_MAXDBS };
+      unsigned int maxreaders_{ DEFAULT_MAXREADERS };
+      size_t mapsize_{ DEFAULT_MMAPSIZE };
+      mdb_mode_t mode_{ DEFAULT_MODE };
+      unsigned int flags_{ 0 };
+      std::filesystem::path path_;
+      error_t lasterror_;
 
    public:
-      database_t() = default;
-      database_t(const database_t&) = delete;
-      database_t& operator=(const database_t&) = delete;
+      env_t(const env_t&) = delete;
+      env_t& operator=(const env_t&) = delete;
+      ~env_t() { close(); }
 
-      ~database_t()
+      // create a new lmdb environment object. the creation of environment object fails
+      // handle() returns nullptr and lasterror() returns the error code.
+      //
+      // flags is a variadic template list of flags to be passed to mdb_env_open function.
+      // if no flags are passed, the default value of 0 will be used. All flags passed are
+      // ORed in and the final result is passed to mdb_env_open. The following flags are
+      // suggested:
+      //
+      //    * MDB_NOSUBDIR Store files directly in the path (as files), not inside a directory
+      //    * MDB_RDONLY Open environment in read-only mode (no writes allowed)
+      //    * MDB_WRITEMAP Use writable memory map (faster writes, less crash-safe)
+      //    * MDB_NOMETASYNC Don’t flush metadata buffers after commit (less safe, faster)
+      //    * MDB_NOSYNC Skip flush to disk after commit (even less safe, fastest)
+      //    * MDB_MAPASYNC Use async map flushing(requires MDB_NOSYNC)
+      //    * MDB_NOTLS Don’t use thread-local storage; transactions must be manually managed per thread
+      //    * MDB_NOLOCK Don’t use file locking — use only if you guarantee single-process access
+      //    * MDB_NORDAHEAD Disable OS-level read-ahead; better for random access
+      //    * MDB_NOMEMINIT Don’t initialize memory before writing (faster, less secure)
+      //    * MDB_FIXEDMAP Map memory at a fixed address (dangerous; requires advanced OS support)
+      //    * MDB_EPHEMERAL This is a lmdbpp custom flag to indicate files will be deleted on close()
+      // 
+      // if you are using MDB_RDONLY flag the LMDB file must already exist. You cannot create new
+      // new files with MBD_RDONLY flag when open() is invoked
+
+      template<typename... Flags>
+      env_t(Flags... flags)
       {
-         cleanup();
+         const unsigned int f = (0 | ... | flags);
+         lasterror_ = create();
+         if (lasterror_.ok()) flags_ = f;
       }
 
-      database_t(const std::string& path, unsigned int max_tables = DEFAULT_MAXSTORES, size_t mmap_size = DEFAULT_MMAPSIZE, unsigned int max_readers = DEFAULT_MAXREADERS, int mode = DEFAULT_MODE)
+      // Parameter path indicate the filesystem path where will store its data files. It 
+      // must be a directory, unless you use the MDB_NOSUBDIR flag. LMDB will create two
+      // files in this directory:
+      //    * data.mdb: the database file
+      //    * lock.mdb: the reader lock file
+      // Note: the directory must already exist. LMDB does not create it.
+      // If you use MDB_NOSUBDIR flag then path must a be a path including a filename and 
+      // optionally a file extension. MDB_NOSUBDIR tels LMDB to store both data.mdb and lock.mdb
+      // as a single file.
+      // 
+      // flags is a variadic template list of flags to be passed to mdb_env_open function.
+      // if no flags are passed, the default value of 0 will be used. All flags passed are
+      // ORed in and the final result is passed to mdb_env_open. The following flags are
+      // suggested:
+      //
+      //    * MDB_NOSUBDIR Store files directly in the path (as files), not inside a directory
+      //    * MDB_RDONLY Open environment in read-only mode (no writes allowed)
+      //    * MDB_WRITEMAP Use writable memory map (faster writes, less crash-safe)
+      //    * MDB_NOMETASYNC Don’t flush metadata buffers after commit (less safe, faster)
+      //    * MDB_NOSYNC Skip flush to disk after commit (even less safe, fastest)
+      //    * MDB_MAPASYNC Use async map flushing(requires MDB_NOSYNC)
+      //    * MDB_NOTLS Don’t use thread-local storage; transactions must be manually managed per thread
+      //    * MDB_NOLOCK Don’t use file locking — use only if you guarantee single-process access
+      //    * MDB_NORDAHEAD Disable OS-level read-ahead; better for random access
+      //    * MDB_NOMEMINIT Don’t initialize memory before writing (faster, less secure)
+      //    * MDB_FIXEDMAP Map memory at a fixed address (dangerous; requires advanced OS support)
+      //    * MDB_EPHEMERAL This is a lmdbpp custom flag to indicate files will be deleted on close()
+      // 
+      // if you are using MDB_RDONLY flag the LMDB file must already exist. You cannot create new
+      // new files with MBD_RDONLY flag when open() is invoked
+      // 
+      // If the creation of a new environment object fails handle() returns nullptr and 
+      // lasterror() returns the error code
+      template<typename... Flags>
+      env_t(const std::filesystem::path path, Flags... flags)
       {
-         if (status_t status = initialize(path, max_tables, mmap_size, max_readers, mode); status.nok())
+         const unsigned int f = (0 | ... | flags);
+         lasterror_ = create.ok();
+         if (lasterror_.ok())
          {
-            throw error_t(status);
+            path_ = path;
+            flags_ = f;
          }
       }
 
-      database_t(database_t&& other) noexcept
+      env_t(env_t&& other) noexcept
          : envptr_{ other.envptr_ }
-         , max_store_{ other.max_store_ }
-         , mmap_size_{ other.mmap_size_ }
+         , isopen_{ std::move(other.isopen_) }
+         , maxdbs_{ std::move(other.maxdbs_) }
+         , maxreaders_{ std::move(other.maxreaders_) }
+         , mapsize_{ std::move(other.mapsize_) }
+         , mode_{ std::move(other.mode_) }
+         , flags_{ std::move(other.flags_) }
+         , path_{ std::move(other.path_) }
+         , lasterror_{ std::move(other.lasterror_) }
       {
          other.envptr_ = nullptr;
-         other.max_store_ = 0;
-         other.mmap_size_ = 0;
+         other.isopen_ = false;
+         other.lasterror_ = error_t();
       }
 
-      database_t& operator=(database_t&& other) noexcept
+      env_t& operator=(env_t&& other) noexcept
       {
          if (this != &other)
          {
+            cleanup();
             envptr_ = other.envptr_;
+            isopen_ = std::move(other.isopen_);
+            maxdbs_ = std::move(other.maxdbs_);
+            maxreaders_ = std::move(other.maxreaders_);
+            mapsize_ = std::move(other.mapsize_);
+            mode_ = std::move(other.mode_);
+            flags_ = std::move(other.flags_);
+            path_ = std::move(other.path_);
+            lasterror_ = std::move(other.lasterror_);
+
             other.envptr_ = nullptr;
-            max_store_ = other.max_store_;
-            other.max_store_ = 0;
-            mmap_size_ = other.mmap_size_;
-            other.mmap_size_ = 0;
+            other.isopen_ = false;
+            other.lasterror_ = error_t();
          }
          return *this;
       }
 
-      status_t initialize(const std::string& path, unsigned int max_stores = DEFAULT_MAXSTORES, size_t mmap_size = DEFAULT_MMAPSIZE, unsigned int max_readers = DEFAULT_MAXREADERS, int mode = DEFAULT_MODE) noexcept
+      // Opens the LMDB environment on disk, as it maps the database into memory,
+      // opens underlying data and lock files and enables actual read/write operations
+      // in the environment. Methods maxdbs(), maxreaders(), mmapsize() and mode() should
+      // be called before open to change the default values. If the default constructor
+      // was used, the LMDB files will be created in the current folder.
+      // 
+      // The default values are:
+      //    * maxdbs - maximum named DBs, default is 128
+      //    * maxreaders - maximum read transactions, default is 512
+      //    * mapsize - actual mmap (data) size, default is 2 GiB
+      //    * mode - file access mode, default is 0644 (-rw-r--r--)
+      // 
+      // If path is not set and MDB_NOSUBDIR flag is set, the LMDB single file will be created
+      // in the default directory with the file name set as lmdb.mdb.
+      //
+      // if mdb_env_open() fails, the current env pointer is released and cleanup, and a new env 
+      // pointer is allocated. If environment is already open, it returns MDB_INVALID
+      error_t open()
       {
-         status_t status;
-         if (status = mdb_env_create(&envptr_); status.nok())
+         lasterror_ = {};
+         try
          {
-            return status;
+            if (path_.empty())
+            {
+               path_ = std::filesystem::current_path();
+               if (flags_ & MDB_NOSUBDIR)
+               {
+                  path_ = path_ / DEFAULT_NAME;
+               }
+            }
          }
-         if (status = mdb_env_set_maxdbs(envptr_, max_stores); status.nok())
+         catch (const std::filesystem::filesystem_error&)
          {
-            return status;
+            lasterror_ = error_t(MDB_INVALID);
          }
-         if (status = mdb_env_set_mapsize(envptr_, mmap_size); status.nok())
+         if (lasterror_.ok())
          {
-            return status;
+            if (envptr_ == nullptr)
+            {
+               if (lasterror_ = create(); !lasterror_.ok()) return lasterror_;;
+            }
+            if (lasterror_ = init(path_.string(), flags_); !lasterror_.ok())
+            {
+               cleanup();
+               create();
+            }
          }
-         if (status = mdb_env_set_maxreaders(envptr_, max_readers); status.nok())
+         return lasterror_;
+      }
+
+      // close and cleanup the current environment
+      void close() noexcept
+      {
+         cleanup();
+         if (flags_ & MDB_EPHEMERAL)
          {
-            return status;
+            remove();
          }
-         if (status = mdb_env_open(envptr_, path.c_str(), 0, mode); status.nok())
+      }
+
+      // Returns the configured maximum number of named databases.
+      // Can be called at any time.
+      MDB_dbi maxdbs() const noexcept
+      {
+         return maxdbs_;
+      }
+
+      // Specifies how many named databases you plan to use (in addition to the 
+      // default DB). Must be called before opening the environment. If called after
+      // the environment is opened, it returns error MDB_INVALID and the value is
+      // not stored.
+      error_t maxdbs(MDB_dbi dbs) noexcept
+      {
+         if (isopen_) return lasterror_ = error_t(MDB_INVALID);
+         maxdbs_ = dbs;
+         return lasterror_ = error_t();
+      }
+
+      // Returns the configured maximum number of readers.
+      unsigned int maxreaders() const noexcept
+      {
+         return maxreaders_;
+      }
+
+      // Sets the maximum number of concurrent read-only transactions (readers).
+      // Default is 126 on POSIX. Returns MDC_INVALID if called after the environment
+      // was opened
+      error_t maxreaders(unsigned int readers) noexcept
+      {
+         if (isopen_) return error_t(MDB_INVALID);
+         maxreaders_ = readers;
+         return lasterror_ = error_t();
+      }
+
+      // Retrieves the current memory map size. Returns 0 if the operation fails
+      // after the environment was opened
+      size_t mmapsize() const noexcept
+      {
+         return mapsize_;
+      }
+
+      // Sets the maximum size (in bytes) of the memory-mapped region, i.e. maximum 
+      // database size. Must be used before mdb_env_open(). Can be increased later if 
+      // needed. Returns MDB_INVALID if called after environment was opened.
+      error_t mmapsize(size_t size) noexcept
+      {
+         if (isopen_) return lasterror_ = lasterror_ = error_t(MDB_INVALID);
+         mapsize_ = size;
+         return lasterror_ = error_t();
+      }
+      
+      // In
+      error_t mmap_increase(size_t newSize) noexcept
+      {
+         return {};
+      }
+
+      // Retrieve the current file mode
+      mdb_mode_t mode() const noexcept
+      {
+         return mode_;
+      }
+
+      // Set the file permissions. Return MDB_INVALID if environment already open
+      // The recommended permissions are:
+      // 0664 Owner and group read/write
+      // 0600 Owner read/write only
+      // 0644 Owner read/write others read only. This is the default mode
+      error_t mode(mdb_mode_t m) noexcept
+      {
+         if (isopen_) return lasterror_ = error_t(MDB_INVALID);
+         mode_ = m;
+         return lasterror_ = error_t();
+      }
+
+      // Returns the maximum key length supported (default 511 bytes, or as defined 
+      // by compile-time MDB_MAXKEYSIZE).
+      int maxkeysize() const noexcept
+      {
+         return mdb_env_get_maxkeysize(envptr_);
+      }
+
+      // Retrieves the filesystem path passed to open(). Returns an empty path
+      // if environment is not open or if the operation fails
+      std::filesystem::path path() const noexcept
+      {
+         if (isopen_)
          {
-            return status;
+            const char* p{ nullptr };
+            if (error_t rc{ mdb_env_get_path(envptr_, &p) }; rc.ok()) return std::filesystem::path(p);
+            return {};
          }
-         max_store_ = max_stores;
-         mmap_size_ = mmap_size;
-         return status;
+         return path_;
+      }
+
+      error_t path(std::filesystem::path p) noexcept
+      {
+         if (isopen_) return error_t(MDB_INVALID);
+         path_ = p;
+         return {};
+      }
+
+      // Returns the current environment flags bitmask. Return -1 if the operation failed
+      // Can be called anytime
+      unsigned int getflags() const noexcept
+      {
+         return flags_;
+      }
+
+      // set the environment flags. if this method is called while the environment is open
+      // it returs MDB_INVALID, otherwise it set the flags and return success.
+      template<typename... Flags>
+      error_t setflags(Flags... flags)
+      {
+         if (isopen_) return error_t(MDB_INVALID);
+         const unsigned int f = (0 | ... | flags);
+         flags_ = f;
+         return {};
+      }
+
+      // Checks for stale (dead) reader slots in the lock table. This is used to clean up 
+      // reader slots left behind by crashed or terminated processes. Behavior:
+      // * Only the writer process should call this function.
+      // * The check is only meaningful when multiple processes use the environment.
+      // * Stale reader slots occur when a process exits without properly calling close().
+      // check() returns non-zero() if any dead reader slot were cleared, returns zero
+      // if all reader slots are valid, returns -1 if operation failed
+      int check() noexcept
+      {
+         if (!isopen_) return -1;
+         int dead{ 0 };
+         if (int rc = mdb_reader_check(envptr_, &dead); rc != 0) return -1;
+         return dead;
+      }
+
+      // Manually flushes the LMDB memory-mapped data to disk — ensuring durability.
+      // This is used to :
+      // * Force a flush outside of a transaction
+      // * Ensure data is persisted immediately(especially useful with flags like MDB_NOSYNC or MDB_MAPASYNC)
+      // When force is set to false, the default, flush only if MDB_NOSYNC or MDB_NOMETASYNC was used 
+      // during open(). Setting force to true cause it to always flush. Returns EINVAL if called
+      // when the environment is not open
+      errno_t flush(bool force = true) noexcept
+      {
+         if (!isopen_) return EINVAL;
+         return mdb_env_sync(envptr_, (force ? 1 : 0));
+      }
+
+      // Returns true if environment is open
+      bool isopen() const noexcept
+      {
+         return isopen_;
+      }
+
+      // retrieve the error result of the last operation
+      error_t lasterror() const noexcept
+      {
+         return lasterror_;
+      }
+
+      // return the lmdb environment handle. Can be called at any time.
+      // handle() returns nullptr is the environment was not yet created.
+      [[nodiscard]] MDB_env* handle() const noexcept
+      {
+         return envptr_;
+      }
+
+      // Return true of LMDB file(s) exists, return false otherwise
+      // these function only work if the environment is open, or after it
+      // is closed
+      bool exist() const noexcept
+      {
+         namespace fs = std::filesystem;
+         try
+         {
+            if (flags_ & MDB_NOSUBDIR)
+            {
+               if (fs::exists(path_) && fs::is_regular_file(path_)) return true;
+            }
+            else if (fs::exists(path_) && fs::is_directory(path_))
+            {
+               std::filesystem::path datafile{ path_ / "data.mdb" };
+               std::filesystem::path lockfile{ path_ / "lock.mdb" };
+
+               if (fs::exists(datafile) && fs::is_regular_file(datafile) &&
+                  fs::exists(lockfile) && fs::is_regular_file(lockfile))
+               {
+                  return true;
+               }
+            }
+         }
+         catch (const std::filesystem::filesystem_error&)
+         { 
+            // do nothing here, just let the function return false
+         }
+         return false;
+      }
+
+      // remove LMDB files if the environment is closed
+      bool remove() const noexcept
+      {
+         namespace fs = std::filesystem;
+         try
+         {
+            if (!isopen_ && exist())
+            {
+               if (flags_ & MDB_NOSUBDIR)
+               {
+                  if (fs::remove(path_)) return true;
+               }
+               else
+               {
+                  std::filesystem::path datafile{ path_ / "data.mdb" };
+                  std::filesystem::path lockfile{ path_ / "lock.mdb" };
+                  if (fs::remove(datafile) && fs::remove(lockfile))
+                  {
+                     return true;
+                  }
+               }
+            }
+         }
+         catch (const std::filesystem::filesystem_error&)
+         {
+            // do nothing here, just let the function return false
+         }
+         return false;
+      }
+
+   private:
+      error_t create() noexcept
+      {
+         cleanup();
+         if (error_t rc{ mdb_env_create(&envptr_) }; !rc.ok())
+         {
+            envptr_ = nullptr;
+            return rc;
+         }
+         return {};
       }
 
       void cleanup() noexcept
@@ -194,734 +643,82 @@ namespace lmdb {
          if (envptr_)
          {
             mdb_env_close(envptr_);
+            isopen_ = false;
             envptr_ = nullptr;
          }
       }
 
-      // return the number of stale slots cleared
-      int check() noexcept
+      error_t init(const std::string& path, unsigned int flags)
       {
-         int dead{ 0 };
-         if (!envptr_ && (mdb_reader_check(envptr_, &dead) >= 0))
-         {
-            return dead;
-         }
-         return 0;
-      }
-
-      // flush buffes to disk
-      status_t flush() noexcept
-      {
-         return status_t(mdb_env_sync(envptr_, 0));
-      }
-
-      std::string path() const noexcept
-      {
-         const char* ptr{ nullptr };
-         if (envptr_)
-         {
-            int rc = mdb_env_get_path(envptr_, &ptr);
-            if (rc != MDB_SUCCESS)
-            {
-               return std::string();
-            }
-         }
-         return std::string(ptr ? ptr : "");
-      }
-
-      size_t max_readers() const noexcept
-      {
-         unsigned int readers{ 0 };
-         if (int rc = mdb_env_get_maxreaders(envptr_, &readers); rc != MDB_SUCCESS)
-         {
-            return 0;
-         }
-         return readers;
-      }
-
-      size_t max_stores() const noexcept
-      {
-         return max_store_;
-      }
-
-      size_t mmap_size() const noexcept
-      {
-         return mmap_size_;
-      }
-
-      size_t max_keysize() const noexcept
-      {
-         int count{ 0 };
-         if (envptr_)
-         {
-            count = mdb_env_get_maxkeysize(envptr_);
-         }
-         return size_t(count);
-      }
-
-      MDB_env* handle() noexcept
-      {
-         return envptr_;
-      }
-   }; // class environment_t
-
-   class transaction_t
-   {
-      database_t& env_;
-      MDB_txn* txnptr_{ nullptr };
-      transaction_type_t type_{ transaction_type_t::none };
-
-   public:
-      transaction_t() = delete;
-      transaction_t(const transaction_t&) = delete;
-      transaction_t& operator=(const transaction_t&) = delete;
-
-      explicit transaction_t(database_t& env) noexcept
-         : env_{ env }
-      {}
-
-      transaction_t(database_t& env, transaction_type_t type)
-         : env_{ env }
-      {
-         if (status_t status = begin(type); status.nok())
-         {
-            throw error_t(status);
-         }
-      }
-
-      ~transaction_t() noexcept
-      {
-         abort();
-      }
-
-      transaction_t(transaction_t&& other) noexcept
-         : env_{ other.env_ }
-         , txnptr_{ other.txnptr_ }
-         , type_{ other.type_ }
-      {
-         other.txnptr_ = nullptr;
-         other.type_ = transaction_type_t::none;
-      }
-
-      transaction_t& operator=(transaction_t&& other) noexcept
-      {
-         if (this != &other)
-         {
-            txnptr_ = other.txnptr_;
-            other.txnptr_ = nullptr;
-            type_ = other.type_;
-            other.type_ = transaction_type_t::none;
-         }
-         return *this;
-      }
-
-      status_t begin(transaction_type_t type) noexcept
-      {
-         if (type == transaction_type_t::none)
-         {
-            return status_t(MDB_INVALID_TRANSACTION_TYPE);
-         }
-         if (txnptr_)
-         {
-            if (status_t status(mdb_txn_commit(txnptr_));  status.nok())
-            {
-                return status;
-            }
-            type_ = transaction_type_t::none;
-         }
-         if (int rc = mdb_txn_begin(env_.handle(), nullptr, get_type(type), &txnptr_); rc != MDB_SUCCESS)
-         {
-            return status_t(rc);
-         }
-         type_ = type;
-         return status_t();
-      }
-
-      status_t commit() noexcept
-      {
-         if (!txnptr_)
-         {
-            return status_t(MDB_TRANSACTION_HANDLE_NULL);
-         }
-         if (int rc = mdb_txn_commit(txnptr_); rc != MDB_SUCCESS)
-         {
-            return status_t(rc);
-         }
-         txnptr_ = nullptr;
-         type_ = transaction_type_t::none;
-         return status_t();
-      }
-
-      status_t abort() noexcept
-      {
-         if (!txnptr_)
-         {
-            return status_t(MDB_TRANSACTION_HANDLE_NULL);
-         }
-         mdb_txn_abort(txnptr_);
-         txnptr_ = nullptr;
-         type_ = transaction_type_t::none;
-         return status_t();
-      }
-
-      bool started() const noexcept
-      {
-         return txnptr_ != nullptr;
-      }
-
-      transaction_type_t type() const noexcept
-      {
-         return type_;
-      }
-
-      MDB_txn* handle() noexcept
-      {
-         return txnptr_;
-      }
-
-      database_t& database() noexcept
-      {
-         return env_;
-      }
-
-   private:
-      int get_type(transaction_type_t type) const noexcept
-      {
-         switch (type)
-         {
-         case transaction_type_t::none: return MDB_RDONLY;
-         case transaction_type_t::read_write: return 0;
-         case transaction_type_t::read_only: return MDB_RDONLY;
-         }
-         return 0;
-      }
-   }; // class transaction_t
-
-   class data_t
-   {
-      MDB_val data_{};
-
-   public:
-      using value_type = std::string;
-      using reference = value_type&;
-      using const_reference = const value_type&;
-      using pointer = value_type*;
-      using const_pointer = const value_type*;
-
-      data_t(const data_t&) = default;
-      data_t(data_t&&) noexcept = default;
-      data_t& operator=(const data_t&) = default;
-      data_t& operator=(data_t&&) noexcept = default;
-
-      data_t() noexcept
-      {
-         data_.mv_size = 0;
-         data_.mv_data = nullptr;
-      }
-
-      template <typename T>
-      explicit data_t(const T& obj) noexcept
-      {
-         data_.mv_data = nullptr;
-         data_.mv_size = obj.size();
-         if (data_.mv_size > 0)
-         {
-            data_.mv_data = (void*)(&obj[0]);
-         }
-      }
-
-      size_t size() const noexcept
-      {
-         return data_.mv_size;
-      }
-
-      const MDB_val* data() const noexcept
-      {
-         return &data_;
-      }
-
-      MDB_val* data() noexcept
-      {
-         return &data_;
-      }
-
-      void get(std::string& str) noexcept
-      {
-         if (data_.mv_size > 0)
-         {
-            str.resize(data_.mv_size);
-            std::memcpy((void*)&str[0], data_.mv_data, data_.mv_size);
-            return;
-         }
-         str.clear();
-      }
-
-      void get(std::string_view& sv) noexcept
-      {
-         if (data_.mv_size > 0)
-         {
-            sv = std::move(std::string_view((std::string_view::pointer)data_.mv_data, data_.mv_size));
-         }
-         sv = std::string_view();
-      }
-
-      template <typename T>
-      void set(T& obj) noexcept
-      {
-         data_.mv_size = obj.size();
-         data_.mv_data = nullptr;
-         if (data_.mv_size > 0)
-         {
-            data_.mv_data = &obj[0];
-         }
-      }
-
-      template <typename T>
-      void set(const T& obj) noexcept
-      {
-         data_.mv_size = obj.size();
-         data_.mv_data = nullptr;
-         if (data_.mv_size > 0)
-         {
-            data_.mv_data = (void*)&obj[0];
-         }
+         if (isopen_) return error_t(MDB_INVALID);
+         // set maxdbs
+         if (error_t rc{ mdb_env_set_maxdbs(envptr_, maxdbs_) }; !rc.ok()) return rc;
+         // set maxreaders
+         if (error_t rc{ mdb_env_set_maxreaders(envptr_, maxreaders_) }; !rc.ok()) return rc;
+         // set mmapsize
+         if (error_t rc{ mdb_env_set_mapsize(envptr_, mapsize_)}; !rc.ok()) return rc;
+         // open the environment
+         // make sure we do not pass MDB_EPHEMERAL flag to LMDB
+         if (error_t rc{ mdb_env_open(envptr_, path.c_str(), (flags & ~MDB_EPHEMERAL), mode_) }; !rc.ok()) return rc;
+         isopen_ = true;
+         return error_t();
       }
    };
 
-   class store_t
+   // txn_t: RAII-style wrapper for LMDB transactions.
+   //
+   // This class wraps an MDB_txn* and manages its lifetime using RAII. It supports
+   // both read-only and read-write transactions, with automatic cleanup:
+   //
+   // - On destruction, the transaction is aborted unless it was explicitly committed.
+   // - Supports move semantics to transfer ownership safely.
+   // - Provides access to the raw MDB_txn* pointer for LMDB calls.
+   // - For read-only transactions, supports reset() and renew() to reuse the object
+   //   without holding open a long-lived snapshot.
+   //
+   // Example usage:
+   //
+   //   txn_t txn(env, txn_t::mode::read_write);
+   //   mdb_put(txn.get(), dbi, &key, &val, 0);
+   //   txn.commit();
+   //
+   // For read-only transactions:
+   //
+   //   txn_t txn(env, txn_t::mode::read_only);
+   //   // read something...
+   //   txn.reset();  // release snapshot
+   //   // wait or do other work...
+   //   txn.renew();  // reacquire fresh snapshot
+   //
+   // Notes:
+   // - Only one write transaction may be active in an environment at a time.
+   // - Multiple read-only transactions can exist concurrently.
+   // - reset() and renew() are only valid on read-only transactions.
+   class txn_t
    {
-      database_t& env_;
-      MDB_dbi id_{ 0 };
-      bool opened_{ false };
-      std::string name_;
-
    public:
-      store_t() = delete;
-      store_t(const store_t&) = delete;
-      store_t& operator=(const store_t&) = delete;
-
-      explicit store_t(database_t& env) noexcept
-         : env_{ env }
-      {}
-
-      ~store_t() noexcept
-      {
-         close();
-      }
-
-      store_t(store_t&& other) noexcept
-         : env_{ other.env_ }
-         , id_{ other.id_ }
-         , opened_{ other.opened_ }
-         , name_{ std::move(other.name_) }
-      {
-         other.id_ = 0;
-         other.opened_ = false;
-      }
-
-      store_t& operator=(store_t&& other) noexcept
-      {
-         if (this != &other)
-         {
-            id_ = other.id_;
-            opened_ = other.opened_;
-            name_ = std::move(other.name_);
-            other.id_ = 0;
-            other.opened_ = false;
-         }
-         return *this;
-      }
-
-      status_t create(transaction_t& txn, const std::string& name) noexcept
-      {
-         return open_or_create(txn, name, true);
-      }
-
-      status_t open(transaction_t& txn, const std::string& name) noexcept
-      {
-         return open_or_create(txn, name, false);
-      }
-
-      status_t close(transaction_t&) noexcept
-      {
-         return close();
-      }
-
-      status_t drop(transaction_t& txn) noexcept
-      {
-         status_t status{ MDB_NOT_OPEN };
-         if (!opened_)
-         {
-            return status;
-         }
-         if (status = mdb_drop(txn.handle(), id_, 1); status.nok())
-         {
-            return status;
-         }
-         opened_ = false;
-         name_.clear();
-         return status;
-      }
-
-      status_t get(transaction_t& txn, const std::string_view& target_key, std::string& key, std::string& value) noexcept
-      {
-         status_t status{ MDB_NOT_OPEN };
-         if (!opened_)
-         {
-            return status;
-         }
-         data_t k(target_key), v;
-         if (status = mdb_get(txn.handle(), id_, k.data(), v.data()); status.nok())
-         {
-            return status;
-         }
-         k.get(key);
-         v.get(value);
-         return status;
-      }
-
-      status_t put(transaction_t& txn, const std::string_view& key, const std::string_view& value) noexcept
-      {
-         if (!opened_)
-         {
-            return status_t(MDB_NOT_OPEN);
-         }
-         data_t k(key);
-         data_t v(value);
-         return status_t(mdb_put(txn.handle(), id_, k.data(), v.data(), 0));
-      }
-
-      status_t del(transaction_t& txn, const std::string_view& key, const std::string_view& value) noexcept
-      {
-         if (!opened_)
-         {
-            return status_t(MDB_NOT_OPEN);
-         }
-         data_t k(key);
-         data_t v(value);
-         return status_t(mdb_del(txn.handle(), id_, k.data(), v.data()));
-      }
-
-      size_t entries(transaction_t& txn) noexcept
-      {
-         MDB_stat stat;
-         status_t status;
-         size_t retval{ 0 };
-         if (status = mdb_stat(txn.handle(), id_, &stat); status.ok())
-         {
-            retval = stat.ms_entries;
-         }
-         return retval;
-      }
-
-      std::string name() const noexcept
-      {
-         return name_;
-      }
-
-      MDB_dbi handle() const noexcept
-      {
-         return id_;
-      }
-
-      database_t& database() noexcept
-      {
-         return env_;
-      }
+      enum class type_t { readonly, readwrite };
 
    private:
-      status_t open_or_create(transaction_t& txn, const std::string& name, bool create) noexcept
-      {
-         status_t status;
-         if (opened_)
-         {
-            return status_t(MDB_ALREADY_OPEN);
-         }
-         if (status = mdb_dbi_open(txn.handle(), name.c_str(), make_mode(create), &id_); status.nok())
-         {
-            return status;
-         }
-         opened_ = true;
-         return status;
-      }
-
-      status_t close() noexcept
-      {
-         if (!opened_)
-         {
-            return status_t(MDB_NOT_OPEN);
-         }
-         opened_ = false;
-         name_.clear();
-         return status_t();
-      }
-
-      unsigned int make_mode(bool create) const noexcept
-      {
-         return create ? MDB_CREATE : 0;
-      }
-
-   }; // class table_base_t
-
-   class cursor_t
-   {
-      MDB_cursor* cursor_{ nullptr };
-      store_t& table_;
+      MDB_env* envptr_{ nullptr };
+      MDB_txn* txnptr_{ nullptr };
+      bool committed_{ true };
+      type_t type_{ type_t::readonly };
 
    public:
-      using key_type = std::string;
-      using key_reference = key_type&;
-      using key_const_reference = const std::string_view&;
-      using value_type = std::string;
-      using value_reference = value_type&;
-      using value_const_reference = const std::string_view&;
+      txn_t() = delete;
+      txn_t(const txn_t&) = delete;
+      txn_t& operator=(const txn_t&) = delete;
 
-      cursor_t() = delete;
-      cursor_t(const cursor_t&) = delete;
-      cursor_t& operator=(cursor_t&& other) = delete;
-      cursor_t& operator=(const cursor_t&) = delete;
+      txn_t& operator=()
+   };
 
-      ~cursor_t() noexcept
-      {
-         close();
-      }
 
-      explicit cursor_t(store_t& table) noexcept
-         : table_{ table }
-      {}
 
-      cursor_t(transaction_t& txn, store_t& table)
-         : table_{ table }
-      {
-         if (status_t status = open(txn); status.nok())
-         {
-            throw error_t(status);
-         }
-      }
-
-      status_t open(transaction_t& txn) noexcept
-      {
-         status_t status{ MDB_ALREADY_OPEN };
-         if (cursor_)
-         {
-            return status;
-         }
-         if (status = mdb_cursor_open(txn.handle(), table_.handle(), &cursor_); status.nok())
-         {
-            return status;
-         }
-         return status;
-      }
-
-      status_t close() noexcept
-      {
-         if (cursor_)
-         {
-            mdb_cursor_close(cursor_);
-            cursor_ = nullptr;
-         }
-         return status_t();
-      }
-
-      status_t current(key_reference key, value_reference value) noexcept
-      {
-         return get(key, value, MDB_GET_CURRENT);
-      }
-
-      status_t current(key_reference key) noexcept
-      {
-         return get(key, MDB_GET_CURRENT);
-      }
-
-      status_t first(key_reference key, value_reference value) noexcept
-      {
-         return get(key, value, MDB_FIRST);
-      }
-
-      status_t first(key_reference key) noexcept
-      {
-         return get(key, MDB_FIRST);
-      }
-
-      status_t first() noexcept
-      {
-         key_type k;
-         return first(k);
-      }
-
-      status_t last(key_reference key, value_reference value) noexcept
-      {
-         return get(key, value, MDB_LAST);
-      }
-
-      status_t last(key_reference key) noexcept
-      {
-         return get(key, MDB_LAST);
-      }
-
-      status_t last() noexcept
-      {
-         key_type k;
-         return last(k);
-      }
-
-      status_t next(key_reference key, value_reference value) noexcept
-      {
-         return get(key, value, MDB_NEXT);
-      }
-
-      status_t next(key_reference key) noexcept
-      {
-         return get(key, MDB_NEXT);
-      }
-
-      status_t next() noexcept
-      {
-         key_type k;
-         return next(k);
-      }
-
-      status_t prior(key_reference key, value_reference value) noexcept
-      {
-         return get(key, value, MDB_PREV);
-      }
-
-      status_t prior(key_reference key) noexcept
-      {
-         return get(key, MDB_PREV);
-      }
-
-      status_t prior() noexcept
-      {
-         key_type k;
-         return prior(k);
-      }
-
-      status_t seek(key_const_reference target_key, value_reference value) noexcept
-      {
-         key_type k{ target_key };
-         if (status_t status = get(k, value, MDB_SET); status.nok())
-         {
-            return status;
-         }
-         return status_t();
-      }
-
-      status_t seek(key_const_reference target_key) noexcept
-      {
-         value_type v;
-         return seek(target_key);
-      }
-
-      status_t find(key_const_reference& target_key, key_reference key, value_reference value) noexcept
-      {
-         key_type k{ target_key };
-         if (status_t status = get(k, value, MDB_SET_KEY); status.nok())
-         {
-            return status;
-         }
-         key = k;
-         return status_t();
-      }
-
-      status_t search(key_const_reference& target_key, key_reference key, value_reference value) noexcept
-      {
-         key_type k{ target_key };
-         if (status_t status = get(k, value, MDB_SET_RANGE); status.nok())
-         {
-            return status;
-         }
-         key = k;
-         return status_t();
-      }
-
-      status_t put(key_const_reference key, value_const_reference value) noexcept
-      {
-         if (!cursor_)
-         {
-            return status_t(MDB_NOT_OPEN);
-         }
-         return status_t(mdb_cursor_put(cursor_, data_t(key).data(), data_t(value).data(), 0));
-      }
-
-      status_t del() noexcept
-      {
-         if (!cursor_)
-         {
-            return status_t(MDB_NOT_OPEN);
-         }
-         return status_t(mdb_cursor_del(cursor_, 0));
-      }
-
-      database_t& database() noexcept
-      {
-         return table_.database();
-      }
-
-      store_t& store() noexcept
-      {
-         return table_;
-      }
-
-      MDB_cursor* handle() noexcept
-      {
-         return cursor_;
-      }
-
-   private:
-      status_t get(key_reference key, value_reference value, MDB_cursor_op op) noexcept
-      {
-         status_t status{ MDB_NOT_OPEN };
-         data_t k;
-         data_t v;
-         if (!cursor_)
-         {
-            return status;
-         }
-         if (is_set_operation(op))
-         {
-            k.set(key);
-         }
-         if (status = mdb_cursor_get(cursor_, k.data(), v.data(), op); status.nok())
-         {
-            return status;
-         }
-         if (op != MDB_SET)
-         {
-            k.get(key);
-            v.get(value);
-         }
-         return status;
-      }
-
-      status_t get(key_reference key, MDB_cursor_op op) noexcept
-      {
-         status_t status{ MDB_NOT_OPEN };
-         data_t k;
-         data_t v;
-         if (!cursor_)
-         {
-            return status;
-         }
-         if (is_set_operation(op))
-         {
-            k.set(key);
-         }
-         if (status = mdb_cursor_get(cursor_, k.data(), v.data(), op); status.nok())
-         {
-            return status;
-         }
-         if (op != MDB_SET)
-         {
-            k.get(key);
-         }
-         return status;
-      }
-
-      bool is_set_operation(MDB_cursor_op op) noexcept
-      {
-         return (op == MDB_SET || op == MDB_SET_KEY || op == MDB_SET_RANGE);
-      }
-   }; // class cursor_base_t
+   /*************************************************************************\
+   * 
+   *
+   *
+   \*************************************************************************/
 
 } // namespace lmdb
