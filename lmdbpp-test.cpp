@@ -35,8 +35,9 @@ TEST_CASE("Current directory", "[curdir]")
    std::cerr << "Current directory: " << std::filesystem::current_path() << "\n";
 }
 
-TEST_CASE("lmdbpp.h environment_t class tests", "[environment_t]")
+TEST_CASE("lmdbpp.h env_t class tests", "[env_t]")
 {
+   // This test suite checks the lifecycle and basic operations of the lmdb::env_t class.
    SECTION("Test enviroment_t default constructor and destructor")
    {
       lmdb::env_t env;
@@ -55,7 +56,8 @@ TEST_CASE("lmdbpp.h environment_t class tests", "[environment_t]")
       REQUIRE((env.mmapsize(1024 * 1024) && env.mmapsize() == 1024 * 1024));
       REQUIRE((env.mode(0600) && env.mode() == 0600));
    }
-   SECTION("test environment_t move constructor")
+
+   SECTION("test env_t move constructor")
    {
       lmdb::env_t srcenv;
       REQUIRE(srcenv.lasterror());
@@ -71,7 +73,8 @@ TEST_CASE("lmdbpp.h environment_t class tests", "[environment_t]")
       REQUIRE((dstenv.mmapsize(1024 * 1024) && dstenv.mmapsize() == 1024 * 1024));
       REQUIRE((dstenv.mode(0600) && dstenv.mode() == 0600));
    }
-   SECTION("test environment_t move operator")
+
+   SECTION("test env_t move operator")
    {
       lmdb::env_t srcenv;
       REQUIRE(srcenv.lasterror());
@@ -94,7 +97,8 @@ TEST_CASE("lmdbpp.h environment_t class tests", "[environment_t]")
       REQUIRE((dstenv.mmapsize(1024 * 1024) && dstenv.mmapsize() == 1024 * 1024));
       REQUIRE((dstenv.mode(0600) && dstenv.mode() == 0600));
    }
-   SECTION("test environment_t open() default flags")
+
+   SECTION("test env_t open() default flags")
    {
       namespace fs = std::filesystem;
       lmdb::env_t env(MDB_EPHEMERAL);
@@ -123,7 +127,8 @@ TEST_CASE("lmdbpp.h environment_t class tests", "[environment_t]")
          REQUIRE(env.handle() == nullptr);
       }
    }
-   SECTION("test environment_t open() with flags MDB_RDONLY and MDB_NOLOCK")
+
+   SECTION("test env_t open() with flags MDB_RDONLY and MDB_NOLOCK")
    {
       namespace fs = std::filesystem;
       lmdb::env_t env;
@@ -163,7 +168,8 @@ TEST_CASE("lmdbpp.h environment_t class tests", "[environment_t]")
          REQUIRE(env.handle() == nullptr);
       }
    }
-   SECTION("test environment_t open() with flags MDB_NOSUBDIR")
+
+   SECTION("test env_t open() with flags MDB_NOSUBDIR")
    {
       namespace fs = std::filesystem;
       lmdb::env_t env;
@@ -192,5 +198,97 @@ TEST_CASE("lmdbpp.h environment_t class tests", "[environment_t]")
          REQUIRE(env.handle() == nullptr);
       }
    }
+}
+
+
+TEST_CASE("txn_t lifecycle and basic operations", "[txn_t]") 
+{
+   lmdb::env_t env(MDB_EPHEMERAL);
+   REQUIRE(env.open().ok());
+
+   SECTION("Begin and commit read-write transaction") 
+   {
+      lmdb::txn_t txn(env, lmdb::txn_t::type_t::readwrite);
+      REQUIRE(txn.begin().ok());
+      REQUIRE(txn.pending());
+      REQUIRE(txn.commit().ok());
+      REQUIRE_FALSE(txn.pending());
+   }
+
+   SECTION("Begin and abort read-write transaction") {
+      lmdb::txn_t txn(env, lmdb::txn_t::type_t::readwrite);
+      REQUIRE(txn.begin().ok());
+      REQUIRE(txn.pending());
+      REQUIRE(txn.abort().ok());
+      REQUIRE_FALSE(txn.pending());
+   }
+
+   SECTION("Reset and renew read-only transaction") {
+      lmdb::txn_t txn(env, lmdb::txn_t::type_t::readonly);
+      REQUIRE(txn.begin().ok());
+      REQUIRE(txn.pending());
+
+      REQUIRE(txn.reset().ok());
+      // No handle use allowed here
+
+      REQUIRE(txn.renew().ok());
+      REQUIRE(txn.pending());
+
+      REQUIRE(txn.abort().ok());
+   }
+
+   SECTION("Double begin fails") {
+      lmdb::txn_t txn(env, lmdb::txn_t::type_t::readonly);
+      REQUIRE(txn.begin().ok());
+      REQUIRE_FALSE(txn.begin().ok()); // Already active
+      REQUIRE(txn.abort().ok());
+   }
+
+   SECTION("Abort without begin fails") {
+      lmdb::txn_t txn(env, lmdb::txn_t::type_t::readwrite);
+      REQUIRE_FALSE(txn.abort().ok()); // No txn active
+   }
+
+   SECTION("Commit without begin fails") {
+      lmdb::txn_t txn(env, lmdb::txn_t::type_t::readwrite);
+      REQUIRE_FALSE(txn.commit().ok());
+   }
+
+   SECTION("Reset fails on write transaction") {
+      lmdb::txn_t txn(env, lmdb::txn_t::type_t::readwrite);
+      REQUIRE(txn.begin().ok());
+      REQUIRE_FALSE(txn.reset().ok());
+      REQUIRE(txn.abort().ok());
+   }
+
+   SECTION("Renew fails on write transaction") {
+      lmdb::txn_t txn(env, lmdb::txn_t::type_t::readwrite);
+      REQUIRE(txn.begin().ok());
+      REQUIRE_FALSE(txn.renew().ok());
+      REQUIRE(txn.abort().ok());
+   }
+
+   SECTION("Move construction") {
+      lmdb::txn_t original(env, lmdb::txn_t::type_t::readwrite);
+      REQUIRE(original.begin().ok());
+
+      lmdb::txn_t moved = std::move(original);
+      REQUIRE(moved.pending());
+      REQUIRE_FALSE(original.pending());
+      REQUIRE(moved.commit().ok());
+   }
+
+   SECTION("Move assignment") {
+      lmdb::txn_t txn1(env, lmdb::txn_t::type_t::readwrite);
+      REQUIRE(txn1.begin().ok());
+
+      lmdb::txn_t txn2(env, lmdb::txn_t::type_t::readwrite);
+      txn2 = std::move(txn1);
+
+      REQUIRE(txn2.pending());
+      REQUIRE_FALSE(txn1.pending());
+      REQUIRE(txn2.commit().ok());
+   }
+   env.close();
 }
 

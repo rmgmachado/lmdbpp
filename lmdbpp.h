@@ -707,13 +707,233 @@ namespace lmdb {
 
    public:
       txn_t() = delete;
+
+      // No copy allowed
       txn_t(const txn_t&) = delete;
       txn_t& operator=(const txn_t&) = delete;
 
-      txn_t& operator=()
+      // Move allowed
+      txn_t(txn_t&& other) noexcept
+         : envptr_{ other.envptr_ }
+         , txnptr_{ other.txnptr_ }
+         , committed_{ other.committed_ }
+         , type_{ other.type_ }
+      {
+         other.envptr_ = nullptr;
+         other.txnptr_ = nullptr;
+         other.committed_ = true;
+      }
+      
+      txn_t& operator=(txn_t&& other) noexcept
+      {
+         if (this != &other)
+         {
+            cleanup();
+            envptr_ = other.envptr_;
+            txnptr_ = other.txnptr_;
+            committed_ = other.committed_;
+            type_ = other.type_;
+            // reset the other object
+            other.envptr_ = nullptr;
+            other.txnptr_ = nullptr;
+            other.committed_ = true;
+         }
+         return *this;  
+      }
+
+      // Constructs a txn_t object with the given environment and transaction type.
+      //
+      // Parameters:
+      // - env:   The LMDB environment to associate with the transaction.
+      // - type:  The transaction type (read-only by default, or read-write).
+      //
+      // Behavior:
+      // - Stores a pointer to the environment handle.
+      // - Initializes the transaction pointer to null and marks it as committed.
+      // - Does not begin the transaction automatically — begin() must be called separately.
+      // - No parent transaction is used (suitable for top-level transactions only).
+      //
+      // Notes:
+      // - Use this constructor for top-level transactions only.
+      explicit txn_t(const env_t& env, type_t type = type_t::readonly)
+         : envptr_{ env.handle() }
+         , txnptr_{ nullptr }
+         , committed_{ true }
+         , type_{ type }
+      {
+      }
+
+      // Begins a new LMDB transaction using the stored environment, type, and optional parent.
+      //
+      // Returns:
+      // - MDB_SUCCESS (wrapped in error_t) on success
+      // - MDB_INVALID if the environment pointer is null
+      // - MDB_BAD_TXN if the transaction is already active or if a write transaction has a parent
+      //
+      // Behavior:
+      // - Allocates a new MDB_txn and stores it in txnptr_
+      // - Uses MDB_RDONLY flag if the transaction type is read-only
+      // - Only one write transaction may exist at a time
+      // - Sets committed_ to false; caller must later commit or abort the transaction
+      //
+      // Notes:
+      // - This function must not be called more than once per txn_t instance without committing or aborting first.
+      error_t begin() noexcept
+      {
+         // Environment must be valid
+         if (envptr_ == nullptr) return error_t(MDB_INVALID);
+
+         // Transaction already active
+         if (txnptr_ != nullptr) return error_t(MDB_BAD_TXN);
+
+         unsigned int flags = (type_ == type_t::readonly) ? MDB_RDONLY : 0;
+         MDB_txn* ptr = nullptr;
+
+         if (error_t rc{ mdb_txn_begin(envptr_, nullptr, flags, &ptr) }; !rc.ok()) return rc;
+         txnptr_ = ptr;
+         committed_ = false;
+         return {};
+      }
+
+      // Commits the current LMDB transaction.
+      //
+      // Returns:
+      // - MDB_SUCCESS (wrapped in error_t) on success
+      // - MDB_BAD_TXN if there is no active transaction
+      // - Any error returned by mdb_txn_commit if the commit fails
+      //
+      // Behavior:
+      // - Commits all changes made during the transaction to the database
+      // - Marks the transaction as committed and resets the internal pointer
+      //
+      // Notes:
+      // - After a successful commit, the transaction is no longer valid and cannot be reused
+      // - If the commit fails, the transaction remains active and must be aborted manually
+      // - Should only be called on a transaction that was successfully started with begin()
+      error_t commit() noexcept
+      {
+         if (txnptr_ == nullptr) return error_t(MDB_BAD_TXN);
+         if (error_t rc{ mdb_txn_commit(txnptr_) }; !rc.ok()) return rc;
+         committed_ = true;
+         txnptr_ = nullptr; // reset the pointer after commit
+         return {};
+      }
+
+      // Aborts the current LMDB transaction and discards any changes.
+      //
+      // Returns:
+      // - MDB_SUCCESS (wrapped in error_t) on success
+      // - MDB_BAD_TXN if no transaction is currently active
+      //
+      // Behavior:
+      // - Calls mdb_txn_abort() to cancel the transaction
+      // - Resets the internal transaction pointer to null
+      // - Marks the transaction as committed to suppress cleanup in the destructor
+      //
+      // Notes:
+      // - This function is safe to call multiple times in a guarded context, but will return an error if the transaction is already null
+      // - After aborting, the transaction object cannot be reused without calling begin() again
+      error_t abort() noexcept
+      {
+         if (txnptr_ == nullptr) return error_t(MDB_BAD_TXN);
+         mdb_txn_abort(txnptr_);
+         txnptr_ = nullptr; // reset the pointer after abort
+         committed_ = true;
+         return {};
+      }
+
+      // Resets a read-only transaction, releasing its snapshot while keeping the transaction object valid.
+      //
+      // Returns:
+      // - MDB_SUCCESS (wrapped in error_t) on success
+      // - MDB_INVALID if there is no active transaction
+      // - MDB_BAD_TXN if the transaction is not read-only
+      //
+      // Behavior:
+      // - Releases the internal snapshot held by the read-only transaction
+      // - The transaction must not be used again until renewed with renew()
+      // - The transaction object remains valid and can be reused later
+      //
+      // Notes:
+      // - Only valid for read-only transactions (MDB_RDONLY)
+      // - After reset(), any access to the transaction (e.g., mdb_get) is invalid until renew() is called
+      error_t reset() noexcept
+      {
+         if (txnptr_ == nullptr) return error_t(MDB_INVALID);
+         if (type_ != type_t::readonly) return error_t(MDB_BAD_TXN);
+         mdb_txn_reset(txnptr_);
+         committed_ = false;
+         return {};
+      }
+
+      // Renews a previously reset read-only transaction, assigning it a fresh snapshot.
+      //
+      // Returns:
+      // - MDB_SUCCESS (wrapped in error_t) on success
+      // - MDB_INVALID if there is no transaction object to renew
+      // - MDB_BAD_TXN if the transaction is not read-only
+      //
+      // Behavior:
+      // - Reinitializes a reset read-only transaction so it can be used again
+      // - The renewed transaction reflects the current state of the environment
+      // - Resets committed_ to false to indicate the transaction is active
+      //
+      // Notes:
+      // - Only valid for transactions created with MDB_RDONLY
+      // - Must be preceded by a call to reset(); otherwise, behavior is undefined
+      // - After renew(), normal read-only operations (mdb_get, etc.) can resume
+      error_t renew() noexcept
+      {
+         if (txnptr_ == nullptr) return error_t(MDB_INVALID);
+         if (type_ != type_t::readonly) return error_t(MDB_BAD_TXN);
+         mdb_txn_renew(txnptr_);
+         committed_ = false;
+         return {};
+      }
+
+      // Returns the type of the transaction(read - only or read - write).
+      //
+      // Useful for checking the transaction mode before performing operations
+      // that are only valid for one type (e.g., reset/renew for read-only).
+      type_t type() const noexcept
+      {
+         return type_;
+      }
+
+      // Returns true if a transaction is currently active and has not been committed.
+      //
+      // This indicates that a transaction has been started (i.e., txnptr_ is valid),
+      // but commit() has not yet been called. It can be used to determine whether
+      // cleanup (e.g., abort) is required before starting a new transaction or during destruction.
+      //
+      // Notes:
+      // - Returns false if no transaction is active or if the last transaction was committed.
+      // - Use this to enforce proper transaction lifecycle management.
+      bool pending() const noexcept
+      {
+         return txnptr_ != nullptr && !committed_;
+      }
+
+      // Returns the raw MDB_txn* handle.
+      //
+      // This allows direct access to the LMDB C API for operations that require the native transaction pointer.
+      // Caution: Should be used carefully to avoid bypassing RAII safety or violating transaction invariants.
+      MDB_txn* handle() const noexcept
+      {
+         return txnptr_;
+      }
+
+   private:
+      void cleanup() noexcept
+      {
+         if (txnptr_ && !committed_)
+         {
+            mdb_txn_abort(txnptr_);
+         }
+         txnptr_ = nullptr;
+         committed_ = true;
+      }
    };
-
-
 
    /*************************************************************************\
    * 
