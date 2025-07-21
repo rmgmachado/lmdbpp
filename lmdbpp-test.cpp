@@ -28,6 +28,12 @@
 #include <catch.hpp>
 #include <vector>
 #include <iostream>
+#include <string>
+#include <string_view>
+#include <span>
+#include <cstddef>
+#include <algorithm>
+
 #include "lmdbpp.h"
 
 TEST_CASE("Current directory", "[curdir]")
@@ -292,3 +298,101 @@ TEST_CASE("txn_t lifecycle and basic operations", "[txn_t]")
    env.close();
 }
 
+TEST_CASE("dbi_t put/get/del with explicit key/value types", "[lmdb][dbi][flat]") {
+   using namespace lmdb;
+
+   env_t env(MDB_NOSUBDIR, MDB_NOSYNC, MDB_EPHEMERAL);
+   REQUIRE(env.open().ok());
+
+   txn_t txn(env, txn_t::type_t::readwrite);
+   REQUIRE(txn.begin().ok());
+
+   dbi_t dbi;
+   REQUIRE(dbi.open(txn, "flatdb", MDB_CREATE | MDB_DUPSORT).ok());
+
+   // TriviallySerializable
+   SECTION("int32_t key with int32_t value") {
+      int32_t key = 1, val = 42, out = 0;
+      REQUIRE(dbi.put(txn, key, val).ok());
+      REQUIRE(dbi.get(txn, key, out).ok());
+      REQUIRE(out == val);
+      REQUIRE(dbi.del(txn, key).ok());
+   }
+
+   SECTION("int64_t key with int64_t value") {
+      int64_t key = 123456789, val = 987654321, out = 0;
+      REQUIRE(dbi.put(txn, key, val).ok());
+      REQUIRE(dbi.get(txn, key, out).ok());
+      REQUIRE(out == val);
+      REQUIRE(dbi.del(txn, key).ok());
+   }
+
+   // StringLike
+   SECTION("string key with string_view value") {
+      std::string key = "key_str";
+      std::string val = "value_sv";
+      std::string out;
+
+      REQUIRE(dbi.put(txn, key, val).ok());  // store the string directly
+      REQUIRE(dbi.get(txn, key, out).ok());
+      REQUIRE(out == val);
+
+   }
+
+
+   SECTION("string_view key with string value") {
+      std::string_view key = "key_sv";
+      std::string val = "value_str", out;
+      REQUIRE(dbi.put(txn, key, val).ok());
+      REQUIRE(dbi.get(txn, key, out).ok());
+      REQUIRE(out == val);
+      REQUIRE(dbi.del(txn, key).ok());
+   }
+
+   // ByteContainerLike
+   SECTION("vector<byte> key with vector<byte> value") {
+      std::vector<std::byte> key = { std::byte{0x01}, std::byte{0x02} };
+      std::vector<std::byte> val = { std::byte{0x0A}, std::byte{0x0B} }, out;
+      REQUIRE(dbi.put(txn, key, val).ok());
+      REQUIRE(dbi.get(txn, key, out).ok());
+      REQUIRE(out == val);
+      REQUIRE(dbi.del(txn, key).ok());
+   }
+
+   SECTION("span<byte> key with span<byte> value") {
+      const std::byte raw_key[] = { std::byte{0x03}, std::byte{0x04} };
+      const std::byte raw_val[] = { std::byte{0x05}, std::byte{0x06} };
+      std::span<const std::byte> key(raw_key, 2);
+      std::span<const std::byte> val(raw_val, 2);
+      std::span<const std::byte> out;
+      REQUIRE(dbi.put(txn, key, val).ok());
+      REQUIRE(dbi.get(txn, key, out).ok());
+      REQUIRE(out.size() == val.size());
+      REQUIRE(std::equal(out.begin(), out.end(), val.begin()));
+      REQUIRE(dbi.del(txn, key).ok());
+   }
+
+   // Negative case
+   SECTION("del before put should return MDB_NOTFOUND") {
+      std::string key = "not-yet";
+      REQUIRE(dbi.del(txn, key).code() == MDB_NOTFOUND);
+   }
+
+   // DUPSORT test
+   SECTION("duplicate values for same key (MDB_DUPSORT)") {
+      std::string key = "dup-key";
+      std::string val1 = "val1";
+      std::string val2 = "val2";
+      REQUIRE(dbi.put(txn, key, val1).ok());
+      REQUIRE(dbi.put(txn, key, val2, MDB_NODUPDATA).ok());
+
+      std::string out;
+      REQUIRE(dbi.get(txn, key, out).ok());
+      REQUIRE((out == val1 || out == val2));
+
+      REQUIRE(dbi.del(txn, key, val1).ok());
+      REQUIRE(dbi.del(txn, key, val2).ok());
+   }
+
+   REQUIRE(txn.commit().ok());
+}
