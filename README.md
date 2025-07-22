@@ -95,6 +95,1362 @@ The following LMDB features are not yet implemented by lmdbpp wrapper:
 | catch2.h | Cath2 single header file - unit tests |
 | CmakeLists.txt | Cmake build script |
 
+## `env_t` – LMDB Environment Manager
+
+RAII-based C++20 wrapper for `MDB_env*` that manages the lifecycle, configuration, and access to an LMDB environment.
+
+---
+
+### Constructors
+
+#### Default constructor with flags
+
+Constructs a new LMDB environment object and stores the specified flags for later use.
+
+```cpp
+template<typename... Flags>
+env_t(Flags... flags)
+```
+
+**Parameters:**
+
+- `flags`: Variadic list of LMDB flags such as `MDB_NOSUBDIR`, `MDB_RDONLY`, `MDB_NOSYNC`, `MDB_WRITEMAP`, `MDB_EPHEMERAL`.
+
+**Behaviour:**\
+Creates an LMDB environment handle with `mdb_env_create` and stores the flag configuration internally.
+
+---
+
+#### Path-based constructor
+
+Constructs a new environment with a specific filesystem path and flags.
+
+```cpp
+template<typename... Flags>
+env_t(const std::filesystem::path path, Flags... flags)
+```
+
+**Parameters:**
+
+- `path`: Filesystem location for the database files (or single file if `MDB_NOSUBDIR` is used).
+- `flags`: Optional LMDB flags.
+
+**Behaviour:**\
+Initializes the environment handle, sets the path, and stores flags for later use in `open()`.
+
+---
+
+#### Move constructor
+
+Transfers ownership of another environment.
+
+```cpp
+env_t(env_t&& other) noexcept
+```
+
+**Parameters:**
+
+- `other`: An rvalue reference to another `env_t` instance.
+
+**Behaviour:**\
+Moves internal state (pointers, configuration, and flags) from the source and resets the source to default.
+
+---
+
+### Operators
+
+#### env\_t& operator=(env\_t&& other) noexcept
+
+Transfers ownership of another `env_t` environment.
+
+```cpp
+env_t& operator=(env_t&& other) noexcept
+```
+
+**Parameters:**
+
+- `other`: An rvalue reference to another `env_t` instance.
+
+**Behaviour:**\
+Cleans up existing resources, adopts state from `other`, and resets `other`.
+
+---
+
+### Destructor
+
+#### \~env\_t()
+
+Destroys the environment and optionally removes files.
+
+```cpp
+~env_t()
+```
+
+**Behaviour:**\
+Calls `close()`. If `MDB_EPHEMERAL` is set, also removes the LMDB files from disk.
+
+---
+
+### Member Functions
+
+#### error\_t open()
+
+Opens the LMDB environment on disk using the configured parameters.
+
+```cpp
+error_t open()
+```
+
+**Parameters:**\
+None
+
+**Behaviour:**
+
+- Sets default path if not provided.
+- Applies `maxdbs`, `maxreaders`, and `mapsize`.
+- Calls `mdb_env_open`.
+
+**Returns:**\
+`MDB_SUCCESS` on success, or error in `lasterror()`
+
+---
+
+#### void close() noexcept
+
+Closes the environment and deletes files if flagged as ephemeral.
+
+```cpp
+void close() noexcept
+```
+
+**Parameters:**\
+None
+
+**Behaviour:**
+
+- Calls `mdb_env_close`.
+- Deletes files if `MDB_EPHEMERAL` is set.
+
+**Returns:**\
+None
+
+---
+
+#### MDB\_dbi maxdbs() const noexcept
+
+Returns the configured maximum number of named databases.
+
+```cpp
+MDB_dbi maxdbs() const noexcept
+```
+
+**Returns:**\
+`MDB_dbi` value representing the max DB count
+
+---
+
+#### error\_t maxdbs(MDB\_dbi dbs) noexcept
+
+Sets the maximum number of named databases.
+
+```cpp
+error_t maxdbs(MDB_dbi dbs) noexcept
+```
+
+**Parameters:**
+
+- `dbs`: Maximum number of named databases
+
+**Behaviour:**\
+Fails if environment is already open. Stores value otherwise.
+
+**Returns:**\
+`MDB_SUCCESS` or `MDB_INVALID`
+
+---
+
+#### unsigned int maxreaders() const noexcept
+
+Returns the configured number of maximum reader slots.
+
+```cpp
+unsigned int maxreaders() const noexcept
+```
+
+**Returns:**\
+Current max readers configuration
+
+---
+
+#### error\_t maxreaders(unsigned int readers) noexcept
+
+Sets the number of concurrent readers.
+
+```cpp
+error_t maxreaders(unsigned int readers) noexcept
+```
+
+**Parameters:**
+
+- `readers`: Maximum concurrent readers
+
+**Returns:**\
+`MDB_SUCCESS` or `MDB_INVALID`
+
+---
+
+#### size\_t mmapsize() const noexcept
+
+Returns the configured memory map size.
+
+```cpp
+size_t mmapsize() const noexcept
+```
+
+**Returns:**\
+Memory map size in bytes
+
+---
+
+#### error\_t mmapsize(size\_t size) noexcept
+
+Sets the memory map size.
+
+```cpp
+error_t mmapsize(size_t size) noexcept
+```
+
+**Parameters:**
+
+- `size`: Map size in bytes
+
+**Returns:**\
+`MDB_SUCCESS` or `MDB_INVALID`
+
+---
+
+#### error\_t mmap\_increase(size\_t newSize) noexcept
+
+Placeholder function to increase map size.
+
+```cpp
+error_t mmap_increase(size_t newSize) noexcept
+```
+
+**Returns:**\
+Always returns `MDB_SUCCESS`
+
+---
+
+#### mdb\_mode\_t mode() const noexcept
+
+Returns the file mode configured for the environment.
+
+```cpp
+mdb_mode_t mode() const noexcept
+```
+
+**Returns:**\
+POSIX file mode
+
+---
+
+#### error\_t mode(mdb\_mode\_t m) noexcept
+
+Sets the file mode.
+
+```cpp
+error_t mode(mdb_mode_t m) noexcept
+```
+
+**Parameters:**
+
+- `m`: POSIX mode (e.g. 0644)
+
+**Returns:**\
+`MDB_SUCCESS` or `MDB_INVALID`
+
+---
+
+#### int maxkeysize() const noexcept
+
+Returns the maximum supported key size.
+
+```cpp
+int maxkeysize() const noexcept
+```
+
+**Returns:**\
+Maximum key size in bytes
+
+---
+
+#### std::filesystem::path path() const noexcept
+
+Returns the configured or resolved filesystem path.
+
+```cpp
+std::filesystem::path path() const noexcept
+```
+
+**Returns:**\
+Current LMDB path
+
+---
+
+#### error\_t path(std::filesystem::path p) noexcept
+
+Sets the LMDB environment path.
+
+```cpp
+error_t path(std::filesystem::path p) noexcept
+```
+
+**Parameters:**
+
+- `p`: Path to use
+
+**Returns:**\
+`MDB_SUCCESS` or `MDB_INVALID`
+
+---
+
+#### unsigned int getflags() const noexcept
+
+Returns the LMDB flags used.
+
+```cpp
+unsigned int getflags() const noexcept
+```
+
+**Returns:**\
+Bitmask of environment flags
+
+---
+
+#### error\_t setflags(Flags... flags)
+
+Sets the LMDB flags.
+
+```cpp
+template<typename... Flags>
+error_t setflags(Flags... flags)
+```
+
+**Parameters:**
+
+- `flags`: Variadic list of LMDB flags
+
+**Returns:**\
+`MDB_SUCCESS` or `MDB_INVALID`
+
+---
+
+#### int check() noexcept
+
+Checks for stale reader slots.
+
+```cpp
+int check() noexcept
+```
+
+**Returns:**
+
+> 0 if readers cleared, 0 if clean, -1 on failure
+
+---
+
+#### errno\_t flush(bool force = true) noexcept
+
+Flushes memory-mapped data to disk.
+
+```cpp
+errno_t flush(bool force = true) noexcept
+```
+
+**Parameters:**
+
+- `force`: If true, forces flush
+
+**Returns:**\
+`MDB_SUCCESS` or `EINVAL`
+
+---
+
+#### bool isopen() const noexcept
+
+Returns whether the environment is open.
+
+```cpp
+bool isopen() const noexcept
+```
+
+**Returns:**\
+`true` or `false`
+
+---
+
+#### error\_t lasterror() const noexcept
+
+Returns the last error status.
+
+```cpp
+error_t lasterror() const noexcept
+```
+
+**Returns:**\
+`error_t` object
+
+---
+
+#### MDB\_env\* handle() const noexcept
+
+Returns the raw LMDB environment handle.
+
+```cpp
+MDB_env* handle() const noexcept
+```
+
+**Returns:**\
+Pointer to `MDB_env`
+
+---
+
+#### bool exist() const noexcept
+
+Checks whether the LMDB files exist.
+
+```cpp
+bool exist() const noexcept
+```
+
+**Returns:**\
+`true` if files exist, `false` otherwise
+
+---
+
+#### bool remove() const noexcept
+
+Removes the LMDB files.
+
+```cpp
+bool remove() const noexcept
+```
+
+**Returns:**\
+`true` on success, `false` otherwise
+
+## `txn_t` – LMDB Transaction Wrapper
+
+RAII-style C++20 wrapper for `MDB_txn*` that manages read-only and read-write transactions within an LMDB environment.
+
+---
+
+### Constructors
+
+#### Explicit constructor with environment and type
+
+Constructs a transaction wrapper tied to a specific LMDB environment and transaction type.
+
+```cpp
+explicit txn_t(const env_t& env, type_t type = type_t::readonly)
+```
+
+**Parameters:**
+
+- `env`: Reference to an `env_t` object representing the LMDB environment.
+- `type`: Optional transaction type (read-only by default).
+
+**Behaviour:** Stores a pointer to the LMDB environment. Transaction must be explicitly started using `begin()`.
+
+---
+
+#### Move constructor
+
+Transfers ownership from another transaction.
+
+```cpp
+txn_t(txn_t&& other) noexcept
+```
+
+**Parameters:**
+
+- `other`: Rvalue reference to another `txn_t` instance.
+
+**Behaviour:** Takes ownership of the underlying `MDB_txn*` and environment pointer. Resets `other`.
+
+---
+
+### Operators
+
+#### txn\_t& operator=(txn\_t&& other) noexcept
+
+Transfers ownership from another transaction.
+
+```cpp
+txn_t& operator=(txn_t&& other) noexcept
+```
+
+**Parameters:**
+
+- `other`: Rvalue reference to another `txn_t` instance.
+
+**Behaviour:** Cleans up current state, transfers ownership from `other`, and resets `other`.
+
+---
+
+### Destructor
+
+#### \~txn\_t()
+
+Aborts the transaction if it hasn't been committed.
+
+```cpp
+~txn_t()
+```
+
+**Behaviour:** Calls `mdb_txn_abort()` if the transaction is still pending.
+
+---
+
+### Member Functions
+
+#### error\_t begin()
+
+Begins a new transaction in the associated environment.
+
+```cpp
+error_t begin()
+```
+
+**Parameters:** None
+
+**Behaviour:** Allocates a new LMDB transaction with optional `MDB_RDONLY` flag. Ensures rules on nested transactions are respected.
+
+**Returns:**
+
+- `MDB_SUCCESS` on success
+- `MDB_INVALID` or `MDB_BAD_TXN` on failure
+
+---
+
+#### error\_t commit()
+
+Commits the transaction.
+
+```cpp
+error_t commit()
+```
+
+**Parameters:** None
+
+**Behaviour:** Calls `mdb_txn_commit()` and marks the transaction as committed.
+
+**Returns:**
+
+- `MDB_SUCCESS` on success
+- `MDB_BAD_TXN` if not active
+- Error code on failure
+
+---
+
+#### error\_t abort()
+
+Aborts the transaction.
+
+```cpp
+error_t abort()
+```
+
+**Parameters:** None
+
+**Behaviour:** Calls `mdb_txn_abort()` and resets the internal pointer. Marks transaction as committed to suppress destructor cleanup.
+
+**Returns:**
+
+- `MDB_SUCCESS` or `MDB_BAD_TXN`
+
+---
+
+#### error\_t reset()
+
+Releases the read-only snapshot for reuse.
+
+```cpp
+error_t reset()
+```
+
+**Parameters:** None
+
+**Behaviour:** Valid only for read-only transactions. Resets snapshot using `mdb_txn_reset()`.
+
+**Returns:**
+
+- `MDB_SUCCESS` or appropriate LMDB error
+
+---
+
+#### error\_t renew()
+
+Renews a previously reset read-only transaction.
+
+```cpp
+error_t renew()
+```
+
+**Parameters:** None
+
+**Behaviour:** Valid only for read-only transactions. Acquires a new snapshot using `mdb_txn_renew()`.
+
+**Returns:**
+
+- `MDB_SUCCESS` or error code
+
+---
+
+#### type\_t type() const noexcept
+
+Returns the transaction type.
+
+```cpp
+type_t type() const noexcept
+```
+
+**Returns:**
+
+- `type_t::readonly` or `type_t::readwrite`
+
+---
+
+#### bool pending() const noexcept
+
+Checks if a transaction is currently active.
+
+```cpp
+bool pending() const noexcept
+```
+
+**Returns:**
+
+- `true` if transaction started but not committed
+- `false` otherwise
+
+---
+
+#### MDB\_txn\* handle() const noexcept
+
+Returns the raw LMDB transaction handle.
+
+```cpp
+MDB_txn* handle() const noexcept
+```
+
+**Returns:**
+
+- Pointer to `MDB_txn`
+
+## `dbi_t` – LMDB Database Handle Wrapper
+
+RAII-style C++20 wrapper for `MDB_dbi` that represents a named or unnamed LMDB database inside an environment.
+
+---
+
+### Constructors
+
+#### Default constructor
+
+Constructs an empty database handle.
+
+```cpp
+dbi_t()
+```
+
+**Parameters:** None
+
+**Behaviour:** Initializes with no open database. Must call `open()` before use.
+
+---
+
+#### Move constructor
+
+Transfers ownership from another `dbi_t`.
+
+```cpp
+dbi_t(dbi_t&& other) noexcept
+```
+
+**Parameters:**
+
+- `other`: Rvalue reference to another `dbi_t`
+
+**Behaviour:** Moves internal database handle. Leaves `other` in a closed state.
+
+---
+
+### Operators
+
+#### dbi\_t& operator=(dbi\_t&& other) noexcept
+
+Transfers ownership from another `dbi_t`.
+
+```cpp
+dbi_t& operator=(dbi_t&& other) noexcept
+```
+
+**Parameters:**
+
+- `other`: Rvalue reference to another `dbi_t`
+
+**Behaviour:** Moves the database handle and opened flag.
+
+---
+
+### Member Functions
+
+#### error\_t open(txn\_t& txn, std::string\_view name = {}, Flags... flags)
+
+Opens an LMDB database within a transaction.
+
+```cpp
+template<typename... Flags>
+error_t open(txn_t& txn, std::string_view name = {}, Flags... flags) noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active LMDB transaction
+- `name`: Optional database name (empty string for unnamed default DB)
+- `flags`: Optional LMDB database open flags
+
+**Behaviour:** Opens or creates a database inside the transaction. Sets internal `MDB_dbi` handle.
+
+**Returns:**
+
+- `MDB_SUCCESS` or LMDB error code
+
+---
+
+#### error\_t erase(txn\_t& txn) const noexcept
+
+Erases all key-value pairs from the database.
+
+```cpp
+error_t erase(txn_t& txn) const noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active write transaction
+
+**Returns:**
+
+- `MDB_SUCCESS` or LMDB error code
+
+---
+
+#### error\_t drop(txn\_t& txn) noexcept
+
+Drops the database and closes its handle.
+
+```cpp
+error_t drop(txn_t& txn) noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active write transaction
+
+**Returns:**
+
+- `MDB_SUCCESS` or LMDB error code
+
+---
+
+#### bool isopen() const noexcept
+
+Checks whether the database handle is open.
+
+```cpp
+bool isopen() const noexcept
+```
+
+**Returns:**
+
+- `true` if open, `false` otherwise
+
+---
+
+#### MDB\_dbi handle() const noexcept
+
+Returns the underlying LMDB database handle.
+
+```cpp
+MDB_dbi handle() const noexcept
+```
+
+**Returns:**
+
+- The `MDB_dbi` handle value
+
+---
+
+#### error\_t stat(const txn\_t& txn, MDB\_stat& out) const noexcept
+
+Retrieves statistics for the database.
+
+```cpp
+error_t stat(const txn_t& txn, MDB_stat& out) const noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active transaction
+- `out`: Output structure to receive statistics
+
+**Returns:**
+
+- `MDB_SUCCESS` or LMDB error code
+
+---
+
+#### template\<detail::SerializableLike KeyT, ValueT, typename... Flags>
+
+error\_t put(const txn\_t& txn, const KeyT& key, const ValueT& value, Flags... flags) const noexcept Inserts or updates a key-value pair.
+
+```cpp
+template<detail::SerializableLike KeyT, detail::SerializableLike ValueT, typename... Flags>
+error_t put(const txn_t& txn, const KeyT& key, const ValueT& value, Flags... flags) const noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active write transaction
+- `key`: Key to insert or update
+- `value`: Value to store
+- `flags`: Optional put flags
+
+**Returns:**
+
+- `MDB_SUCCESS` or LMDB error
+
+---
+
+#### template\<detail::SerializableLike KeyT, ValueT>
+
+error\_t get(const txn\_t& txn, const KeyT& key, ValueT& out\_value) const noexcept Retrieves the value for a given key.
+
+```cpp
+template<detail::SerializableLike KeyT, detail::SerializableLike ValueT>
+error_t get(const txn_t& txn, const KeyT& key, ValueT& out_value) const noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active transaction
+- `key`: Key to query
+- `out_value`: Reference to hold the result
+
+**Returns:**
+
+- `MDB_SUCCESS`, `MDB_NOTFOUND`, or LMDB error
+
+---
+
+#### template\<detail::SerializableLike KeyT>
+
+error\_t del(const txn\_t& txn, const KeyT& key) const noexcept Deletes all values for a given key.
+
+```cpp
+template<detail::SerializableLike KeyT>
+error_t del(const txn_t& txn, const KeyT& key) const noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active write transaction
+- `key`: Key to delete
+
+**Returns:**
+
+- `MDB_SUCCESS`, `MDB_NOTFOUND`, or error
+
+---
+
+#### template\<detail::SerializableLike KeyT, ValueT>
+
+error\_t del(const txn\_t& txn, const KeyT& key, const ValueT& value) const noexcept Deletes a specific key-value pair in DUPSORT DBs.
+
+```cpp
+template<detail::SerializableLike KeyT, detail::SerializableLike ValueT>
+error_t del(const txn_t& txn, const KeyT& key, const ValueT& value) const noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active write transaction
+- `key`: Key to locate
+- `value`: Value to delete
+
+**Returns:**
+
+- `MDB_SUCCESS` or LMDB error
+
+## `cursor_t` – LMDB Cursor Wrapper
+
+RAII-style C++20 wrapper for `MDB_cursor*` providing low-level cursor operations for navigating key-value pairs in an LMDB database.
+
+---
+
+### Constructors
+
+#### Default constructor
+
+Constructs an empty cursor object.
+
+```cpp
+cursor_t()
+```
+
+**Parameters:** None
+
+**Behaviour:** Initializes with no open cursor. Must call `open()` before use.
+
+---
+
+#### Move constructor
+
+Transfers ownership from another `cursor_t`.
+
+```cpp
+cursor_t(cursor_t&& other) noexcept
+```
+
+**Parameters:**
+
+- `other`: Rvalue reference to another `cursor_t`
+
+**Behaviour:** Transfers ownership of the LMDB cursor. Clears `other`.
+
+---
+
+### Operators
+
+#### cursor\_t& operator=(cursor\_t&& other) noexcept
+
+Transfers ownership from another `cursor_t`.
+
+```cpp
+cursor_t& operator=(cursor_t&& other) noexcept
+```
+
+**Parameters:**
+
+- `other`: Rvalue reference to another `cursor_t`
+
+**Behaviour:** Closes current cursor, transfers pointer and context from `other`, and clears `other`.
+
+---
+
+### Destructor
+
+#### \~cursor\_t()
+
+Closes the cursor if open.
+
+```cpp
+~cursor_t()
+```
+
+**Behaviour:** Automatically calls `close()`.
+
+---
+
+### Member Functions
+
+#### error\_t open(txn\_t& txn, dbi\_t& dbi)
+
+Opens a cursor for a given transaction and database.
+
+```cpp
+error_t open(txn_t& txn, dbi_t& dbi) noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active transaction
+- `dbi`: Open database handle
+
+**Returns:**
+
+- `MDB_SUCCESS` or error code
+
+---
+
+#### void close()
+
+Closes the cursor.
+
+```cpp
+void close() noexcept
+```
+
+**Returns:** None
+
+---
+
+#### bool isopen() const noexcept
+
+Checks if the cursor is open.
+
+```cpp
+bool isopen() const noexcept
+```
+
+**Returns:**
+
+- `true` if open, otherwise `false`
+
+---
+
+#### MDB\_cursor\* handle() const noexcept
+
+Returns the raw LMDB cursor pointer.
+
+```cpp
+MDB_cursor* handle() const noexcept
+```
+
+**Returns:**
+
+- Pointer to `MDB_cursor` or `nullptr`
+
+---
+
+#### error\_t renew(txn\_t& txn)
+
+Rebinds the cursor to a new read-only transaction.
+
+```cpp
+error_t renew(txn_t& txn) noexcept
+```
+
+**Parameters:**
+
+- `txn`: Active read-only transaction
+
+**Returns:**
+
+- `MDB_SUCCESS` or error code
+
+---
+
+#### MDB\_dbi dbi() const noexcept
+
+Returns the database handle associated with the cursor.
+
+```cpp
+MDB_dbi dbi() const noexcept
+```
+
+**Returns:**
+
+- The `MDB_dbi` value
+
+---
+
+#### txn\_t\* txn() const noexcept
+
+Returns the associated transaction pointer.
+
+```cpp
+txn_t* txn() const noexcept
+```
+
+**Returns:**
+
+- Pointer to `txn_t` or `nullptr`
+
+---
+
+#### error\_t count(std::size\_t& out) const noexcept
+
+Gets the number of duplicate values at the current key.
+
+```cpp
+error_t count(std::size_t& out) const noexcept
+```
+
+**Parameters:**
+
+- `out`: Output variable to receive count
+
+**Returns:**
+
+- `MDB_SUCCESS` or error code
+
+---
+
+#### error\_t get(KeyT& key, ValueT& value, MDB\_cursor\_op op) const noexcept
+
+Fetches a key-value pair using the given cursor operation.
+
+```cpp
+template<detail::SerializableLike KeyT, detail::SerializableLike ValueT>
+error_t get(KeyT& key, ValueT& value, MDB_cursor_op op) const noexcept
+```
+
+**Parameters:**
+
+- `key`: Input/output key
+- `value`: Output value
+- `op`: LMDB cursor operation code
+
+**Returns:**
+
+- `MDB_SUCCESS`, `MDB_NOTFOUND`, or error
+
+---
+
+#### error\_t put(const KeyT& key, const ValueT& value, Flags... flags) noexcept
+
+Inserts a key-value pair at the current cursor position.
+
+```cpp
+template<detail::SerializableLike KeyT, detail::SerializableLike ValueT, typename... Flags>
+error_t put(const KeyT& key, const ValueT& value, Flags... flags) noexcept
+```
+
+**Parameters:**
+
+- `key`: Key to insert
+- `value`: Value to insert
+- `flags`: Optional LMDB put flags
+
+**Returns:**
+
+- `MDB_SUCCESS`, `MDB_KEYEXIST`, or error
+
+---
+
+#### error\_t del(const KeyT& key) noexcept
+
+Deletes all values for the given key.
+
+```cpp
+template<detail::SerializableLike KeyT>
+error_t del(const KeyT& key) noexcept
+```
+
+**Parameters:**
+
+- `key`: Key to delete
+
+**Returns:**
+
+- `MDB_SUCCESS`, `MDB_NOTFOUND`, or error
+
+---
+
+#### error\_t del(const KeyT& key, const ValueT& value) noexcept
+
+Deletes a specific key-value pair.
+
+```cpp
+template<detail::SerializableLike KeyT, detail::SerializableLike ValueT>
+error_t del(const KeyT& key, const ValueT& value) noexcept
+```
+
+**Parameters:**
+
+- `key`: Key to locate
+- `value`: Value to match
+
+**Returns:**
+
+- `MDB_SUCCESS` or LMDB error
+
+---
+
+#### error\_t del\_all\_dups() noexcept
+
+Deletes all duplicate values for the current key.
+
+```cpp
+error_t del_all_dups() noexcept
+```
+
+**Returns:**
+
+- `MDB_SUCCESS` or error
+
+## `error_t` – LMDB Error Wrapper
+
+Lightweight wrapper for LMDB error codes. Provides an object-oriented interface for inspecting and propagating LMDB API results.
+
+---
+
+### Constructors
+
+#### Default constructor
+
+Constructs a success result.
+
+```cpp
+error_t()
+```
+
+**Behaviour:** Initializes with `MDB_SUCCESS` (no error).
+
+---
+
+#### Explicit constructor from error code
+
+Wraps an LMDB integer return code.
+
+```cpp
+explicit error_t(int code) noexcept
+```
+
+**Parameters:**
+
+- `code`: LMDB return code to wrap
+
+**Behaviour:** Stores the code for later inspection.
+
+---
+
+#### Copy constructor
+
+Constructs a copy of another `error_t` instance.
+
+```cpp
+error_t(const error_t& other)
+```
+
+**Parameters:**
+
+- `other`: The `error_t` instance to copy
+
+**Behaviour:** Copies the internal error code.
+
+---
+
+#### Move constructor
+
+Constructs from a moved `error_t` instance.
+
+```cpp
+error_t(error_t&& other) noexcept
+```
+
+**Parameters:**
+
+- `other`: The `error_t` instance to move from
+
+**Behaviour:** Transfers ownership of the internal error code.
+
+---
+
+### Operators
+
+#### error\_t& operator=(const error\_t& other)
+
+Assigns from another `error_t`.
+
+```cpp
+error_t& operator=(const error_t& other)
+```
+
+**Behaviour:** Copies the error code.
+
+---
+
+#### error\_t& operator=(int code)
+
+Assigns from a raw LMDB error code.
+
+```cpp
+error_t& operator=(int code) noexcept
+```
+
+**Parameters:**
+
+- `code`: LMDB return code
+
+**Behaviour:** Replaces the current code with a new one.
+
+---
+
+#### operator bool() const noexcept
+
+Returns `true` if the error is `MDB_SUCCESS`.
+
+```cpp
+operator bool() const noexcept
+```
+
+**Returns:**
+
+- `true` if no error, otherwise `false`
+
+---
+
+#### operator int() const noexcept
+
+Returns the raw LMDB error code.
+
+```cpp
+operator int() const noexcept
+```
+
+**Returns:**
+
+- Integer LMDB status code
+
+---
+
+### Member Functions
+
+#### bool ok() const noexcept
+
+Checks whether the result is successful.
+
+```cpp
+bool ok() const noexcept
+```
+
+**Returns:**
+
+- `true` if code is `MDB_SUCCESS`, `false` otherwise
+
+---
+
+#### int code() const noexcept
+
+Returns the raw LMDB error code.
+
+```cpp
+int code() const noexcept
+```
+
+**Returns:**
+
+- The internal status code
+
+---
+
+#### std::string message() const
+
+Returns a human-readable string for the error code.
+
+```cpp
+std::string message() const
+```
+
+**Returns:**
+
+- LMDB error message as a string (e.g. from `mdb_strerror`)
+
 ### License
 
 lmdbpp is licensed with the same license as LMDB, The OpenLDAP Public License. A copy of this license is available in the file LICENSE in the top-level directory of the distribution or, alternatively, at http://www.OpenLDAP.org/license.html. Please also refer to Acknowledgement section below.
