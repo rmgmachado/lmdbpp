@@ -10,5 +10,5 @@ set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 20)
 # include folders
 FILE(GLOB_RECURSE MY_HEADERS "./*.h*")
 
-include_directories(./ ../catch2)
+include_directories(./)
 add_executable(lmdbpp midl.c mdb.c lmdbpp-test.cpp ${MY_HEADERS} )
