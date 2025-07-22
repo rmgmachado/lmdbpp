@@ -298,7 +298,8 @@ TEST_CASE("txn_t lifecycle and basic operations", "[txn_t]")
    env.close();
 }
 
-TEST_CASE("dbi_t put/get/del with explicit key/value types", "[lmdb][dbi][flat]") {
+TEST_CASE("dbi_t put/get/del with explicit key/value types", "[lmdb][dbi][flat]") 
+{
    using namespace lmdb;
 
    env_t env(MDB_NOSUBDIR, MDB_NOSYNC, MDB_EPHEMERAL);
@@ -311,7 +312,8 @@ TEST_CASE("dbi_t put/get/del with explicit key/value types", "[lmdb][dbi][flat]"
    REQUIRE(dbi.open(txn, "flatdb", MDB_CREATE | MDB_DUPSORT).ok());
 
    // TriviallySerializable
-   SECTION("int32_t key with int32_t value") {
+   SECTION("int32_t key with int32_t value") 
+   {
       int32_t key = 1, val = 42, out = 0;
       REQUIRE(dbi.put(txn, key, val).ok());
       REQUIRE(dbi.get(txn, key, out).ok());
@@ -319,7 +321,8 @@ TEST_CASE("dbi_t put/get/del with explicit key/value types", "[lmdb][dbi][flat]"
       REQUIRE(dbi.del(txn, key).ok());
    }
 
-   SECTION("int64_t key with int64_t value") {
+   SECTION("int64_t key with int64_t value") 
+   {
       int64_t key = 123456789, val = 987654321, out = 0;
       REQUIRE(dbi.put(txn, key, val).ok());
       REQUIRE(dbi.get(txn, key, out).ok());
@@ -360,11 +363,12 @@ TEST_CASE("dbi_t put/get/del with explicit key/value types", "[lmdb][dbi][flat]"
    }
 
    SECTION("span<byte> key with span<byte> value") {
-      const std::byte raw_key[] = { std::byte{0x03}, std::byte{0x04} };
-      const std::byte raw_val[] = { std::byte{0x05}, std::byte{0x06} };
-      std::span<const std::byte> key(raw_key, 2);
-      std::span<const std::byte> val(raw_val, 2);
-      std::span<const std::byte> out;
+      std::vector<std::byte> raw_key = { std::byte{0x03}, std::byte{0x04} };
+      std::vector<std::byte> raw_val = { std::byte{0x05}, std::byte{0x06} };
+      std::span<const std::byte> key(raw_key);
+      std::span<const std::byte> val(raw_val);
+      std::vector<std::byte> out;
+
       REQUIRE(dbi.put(txn, key, val).ok());
       REQUIRE(dbi.get(txn, key, out).ok());
       REQUIRE(out.size() == val.size());
@@ -396,3 +400,77 @@ TEST_CASE("dbi_t put/get/del with explicit key/value types", "[lmdb][dbi][flat]"
 
    REQUIRE(txn.commit().ok());
 }
+
+TEST_CASE("cursor_t basic functionality", "[lmdb][cursor]") {
+   using namespace lmdb;
+
+   env_t env(MDB_NOSUBDIR, MDB_NOSYNC, MDB_EPHEMERAL);
+   REQUIRE(env.open().ok());
+
+   txn_t txn(env, txn_t::type_t::readwrite);
+   REQUIRE(txn.begin().ok());
+
+   dbi_t dbi;
+   REQUIRE(dbi.open(txn, "cursor_db", MDB_CREATE | MDB_DUPSORT).ok());
+
+   // Insert a few values
+   std::string key = "fruit";
+   std::vector<std::string> values = { "apple", "banana", "cherry" };
+   for (const auto& v : values) {
+      REQUIRE(dbi.put(txn, key, v).ok());
+   }
+
+   REQUIRE(txn.commit().ok());
+
+   txn_t read_txn(env);
+   REQUIRE(read_txn.begin().ok());
+
+   cursor_t cursor;
+   REQUIRE(cursor.open(read_txn, dbi).ok());
+
+   SECTION("count duplicates") {
+      std::string seek = key;
+      std::string dummy;
+      REQUIRE(cursor.get(seek, dummy, MDB_SET).ok());
+
+      std::size_t count = 0;
+      REQUIRE(cursor.count(count).ok());
+      REQUIRE(count == values.size());
+   }
+
+   SECTION("iterate duplicates with NEXT_DUP")
+   {
+      std::string k = key, v;
+      REQUIRE(cursor.get(k, v, MDB_SET).ok());
+
+      std::vector<std::string> found = { v };
+      while (cursor.get(k, v, MDB_NEXT_DUP).ok())
+      {
+         found.push_back(v);
+      }
+
+      REQUIRE(found.size() == values.size());
+      for (const auto& item : found)
+      {
+         REQUIRE(std::find(values.begin(), values.end(), item) != values.end());
+      }
+   }
+
+   SECTION("delete a specific key+value") {
+      txn_t wtxn(env, txn_t::type_t::readwrite);
+      REQUIRE(wtxn.begin().ok());
+
+      cursor_t c2;
+      REQUIRE(c2.open(wtxn, dbi).ok());
+
+      REQUIRE(c2.del(key, values[1]).ok()); // delete "banana"
+
+      std::string check;
+      REQUIRE(dbi.get(wtxn, key, check).ok());
+      REQUIRE(check != values[1]);
+
+      REQUIRE(wtxn.commit().ok());
+   }
+
+}
+

@@ -73,9 +73,15 @@ namespace lmdb {
       error_t& operator=(const error_t&) = default;
       error_t& operator=(error_t&&) noexcept = default;
 
-      explicit error_t(int code) noexcept
+      error_t(int code) noexcept
          : code_(code)
       {
+      }
+
+      error_t& operator=(int code) noexcept
+      {
+         code_ = code;
+         return *this;
       }
 
       [[nodiscard]] bool ok() const noexcept
@@ -227,6 +233,13 @@ namespace lmdb {
             return error_t(EINVAL); // or define your own invalid error
          }
 
+         return {};
+      }
+
+      inline error_t to_mdb_val(std::span<const std::byte> input, MDB_val& out) noexcept 
+      {
+         out.mv_data = const_cast<std::byte*>(input.data());
+         out.mv_size = input.size_bytes();  // total bytes for generic binary data
          return {};
       }
 
@@ -1476,6 +1489,383 @@ namespace lmdb {
          if (auto err = detail::to_mdb_val(value, v); !err.ok()) return err;
 
          return error_t(mdb_del(txn.handle(), dbi_, &k, &v));
+      }
+   };
+
+
+   //==============================================================================
+   // cursor_t - RAII-style wrapper for LMDB cursor (MDB_cursor*)
+   //
+   // This class manages an LMDB cursor bound to a specific transaction and database
+   // using full RAII semantics. It provides safe and efficient access to cursor-based
+   // navigation, read/write operations, and duplicate key handling.
+   //
+   // Usage:
+   //   cursor_t cursor;
+   //   cursor.open(txn, db);
+   //   cursor.get(...);
+   //   cursor.put(...);
+   //   cursor.del(...);
+   //   cursor.close();
+   //
+   // Features:
+   // - RAII: Cursor is automatically closed on destruction
+   // - Move-only: Prevents accidental copies of raw MDB_cursor*
+   // - Supports all LMDB cursor operations:
+   //     * Opening / closing / renewing
+   //     * get() with MDB_cursor_op (FIRST, NEXT, SET, etc.)
+   //     * put() with flexible variadic flags
+   //     * del() for key or key+value
+   //     * del_all_dups() for deleting all duplicates at the current key
+   //     * count() to return number of duplicates
+   // - Type-safe interface via SerializableLike constraints
+   // - Explicit error handling via error_t
+   //
+   // Notes:
+   // - A cursor must be opened before any operations are invoked.
+   // - All cursor operations require an active transaction and an open database.
+   // - The associated transaction must remain valid for the cursor's lifetime.
+   // - Renewing is only allowed for read-only transactions.
+   //==============================================================================
+   class cursor_t
+   {
+      MDB_cursor* cursor_{ nullptr };
+      dbi_t* dbi_{ nullptr }; // used only to validate open
+      txn_t* txn_{ nullptr }; // optional reference, for safety checks
+
+   public:
+      cursor_t() = default;
+      ~cursor_t() { close(); }
+
+      cursor_t(const cursor_t&) = delete;
+      cursor_t& operator=(const cursor_t&) = delete;
+
+      cursor_t(cursor_t&& other) noexcept
+         : cursor_{ other.cursor_ }
+         , dbi_{ other.dbi_ }
+         , txn_{ other.txn_ }
+      {
+         other.cursor_ = nullptr;
+         other.dbi_ = nullptr;
+         other.txn_ = nullptr;
+      }
+
+      cursor_t& operator=(cursor_t&& other) noexcept 
+      {
+         if (this != &other) 
+         {
+            close();
+            cursor_ = other.cursor_;
+            dbi_ = other.dbi_;
+            txn_ = other.txn_;
+            other.cursor_ = nullptr;
+            other.dbi_ = nullptr;
+            other.txn_ = nullptr;
+         }
+         return *this;
+      }
+
+      // open(txn, dbi)
+      // Opens a new LMDB cursor for the specified transaction and database.
+      //
+      // Parameters:
+      // - txn : Active transaction object (read-only or read-write)
+      // - dbi : Opened database handle
+      //
+      // Behavior:
+      // - Closes any previously opened cursor
+      // - Creates a new cursor bound to the provided transaction and database
+      // - Stores internal pointers for safety and state tracking
+      //
+      // Returns:
+      // - error_t(MDB_SUCCESS) on success
+      // - error_t(MDB_BAD_TXN) if transaction or database is invalid
+      // - Any other LMDB error returned by mdb_cursor_open
+      error_t open(txn_t& txn, dbi_t& dbi) noexcept
+      {
+         if (!txn.handle() || !dbi.isopen()) return error_t(MDB_BAD_TXN);
+         close();
+         MDB_cursor* ptr = nullptr;
+         error_t rc = mdb_cursor_open(txn.handle(), dbi.handle(), &ptr);
+         if (rc.ok()) 
+         {
+            cursor_ = ptr;
+            dbi_ = &dbi;
+            txn_ = &txn;
+         }
+         return rc;
+      }
+
+      // close()
+      // Closes and frees the currently open cursor, if any.
+      //
+      // Behavior:
+      // - Calls mdb_cursor_close() if a cursor is open
+      // - Clears internal pointers to mark the cursor as closed
+      // - Safe to call multiple times (idempotent)
+      void close() noexcept 
+      {
+         if (cursor_) mdb_cursor_close(cursor_);
+         cursor_ = nullptr;
+         dbi_ = nullptr;
+         txn_ = nullptr;
+      }
+
+      // isopen()
+      // Returns true if the cursor is currently open and valid.
+      //
+      // This indicates whether a successful call to open() has been made
+      // and the internal cursor handle is not null.
+      [[nodiscard]] bool isopen() const noexcept { return cursor_ != nullptr; }
+
+      // handle()
+      // Returns the raw MDB_cursor* pointer managed by this wrapper.
+      //
+      // This can be used for direct calls to LMDB C API functions if needed.
+      // Returns nullptr if the cursor is not open.
+      [[nodiscard]] MDB_cursor* handle() const noexcept { return cursor_; }
+
+      // renew(txn)
+      // Rebinds the existing cursor to a new read-only transaction.
+      //
+      // This is used to reuse a cursor without deallocating and reallocating it,
+      // but only valid for read-only transactions.
+      //
+      // Parameters:
+      // - txn : A new valid read-only transaction
+      //
+      // Returns:
+      // - MDB_SUCCESS on success
+      // - MDB_BAD_TXN if the cursor or transaction is invalid
+      [[nodiscard]] error_t renew(txn_t& txn) noexcept
+      {
+         if (!cursor_ || !txn.handle()) return error_t(MDB_BAD_TXN);
+         return error_t(mdb_cursor_renew(txn.handle(), cursor_));
+      }
+
+      // dbi()
+      // Returns the MDB_dbi handle associated with this cursor.
+      //
+      // If the cursor is not open, returns 0.
+      [[nodiscard]] MDB_dbi dbi() const noexcept
+      {
+         return cursor_ ? mdb_cursor_dbi(cursor_) : 0;
+      }
+
+      // txn()
+      // Returns a pointer to the transaction currently associated with this cursor.
+      //
+      // Can be used to query transaction metadata or validate scope.
+      [[nodiscard]] txn_t* txn() const noexcept
+      {
+         return txn_;
+      }
+
+      // count(out)
+      // Retrieves the number of duplicate data items for the current key.
+      //
+      // This function is only valid for databases opened with the MDB_DUPSORT flag.
+      // It returns the number of values associated with the key at the current cursor
+      // position.
+      //
+      // Parameters:
+      // - out : Reference to a std::size_t that will receive the duplicate count
+      //
+      // Returns:
+      // - MDB_SUCCESS on success and fills 'out' with the count
+      // - MDB_BAD_DBI if the cursor is not initialized
+      // - Any other LMDB error code from mdb_cursor_count
+      [[nodiscard]] error_t count(std::size_t& out) const noexcept
+      {
+         if (!cursor_) return error_t(MDB_BAD_DBI);
+         mdb_size_t count = 0;
+         error_t rc = mdb_cursor_count(cursor_, &count);
+         if (rc.ok()) out = static_cast<std::size_t>(count);
+         return rc;
+      }
+
+      // get(key, value, op)
+      // Retrieves a key/data pair from the database using an LMDB cursor operation.
+      //
+      // This function positions the cursor using the specified MDB_cursor_op and then
+      // reads the current key/data pair into the user-provided variables. It supports
+      // any types that satisfy the SerializableLike concept.
+      //
+      // Parameters:
+      // - key   : Input/output key object. Used for search or receives the matched key.
+      // - value : Output value object populated with the result.
+      // - op    : One of the MDB_cursor_op enum values that determines cursor movement.
+      //
+      // Supported MDB_cursor_op values:
+      // - MDB_FIRST         : Move to the first key/data pair in the database.
+      // - MDB_LAST          : Move to the last key/data pair in the database.
+      // - MDB_NEXT          : Move to the next key/data pair.
+      // - MDB_PREV          : Move to the previous key/data pair.
+      // - MDB_SET           : Position at the specified key (key must be set); value is output.
+      // - MDB_SET_KEY       : Same as MDB_SET but returns both key and value.
+      // - MDB_SET_RANGE     : Position at the first key greater than or equal to the input key.
+      // - MDB_GET_CURRENT   : Return key/data at current cursor position (key/value are output only).
+      // - MDB_GET_BOTH      : Position at the key/data pair exactly matching both input key and value (for DUPSORT).
+      // - MDB_GET_BOTH_RANGE: Like MDB_GET_BOTH, but value positions to the nearest greater-or-equal.
+      // - MDB_FIRST_DUP     : Move to the first duplicate value for the current key (DUPSORT).
+      // - MDB_LAST_DUP      : Move to the last duplicate value for the current key (DUPSORT).
+      // - MDB_NEXT_DUP      : Move to the next duplicate value for the current key (DUPSORT).
+      // - MDB_PREV_DUP      : Move to the previous duplicate value for the current key (DUPSORT).
+      // - MDB_NEXT_NODUP    : Move to the first value of the next key.
+      // - MDB_PREV_NODUP    : Move to the last value of the previous key.
+      // - MDB_GET_MULTIPLE  : Return multiple values for a fixed-size dup set (DUPFIXED).
+      // - MDB_NEXT_MULTIPLE : Move to the next fixed-size multi-value page (DUPFIXED).
+      // - MDB_PREV_MULTIPLE : Move to the previous fixed-size multi-value page (DUPFIXED).
+      //
+      // Returns:
+      // - MDB_SUCCESS if the cursor was successfully positioned and key/value fetched
+      // - MDB_NOTFOUND if the target entry does not exist
+      // - MDB_BAD_TXN if the cursor is not open or invalid
+      // - EPERM or EINVAL if type serialization/deserialization fails
+      template<detail::SerializableLike KeyT, detail::SerializableLike ValueT>
+      [[nodiscard]] error_t get(KeyT& key, ValueT& value, MDB_cursor_op op) const noexcept 
+      {
+         if (!cursor_) return error_t(MDB_BAD_TXN);
+         MDB_val k, v;
+         if (auto err = detail::to_mdb_val(key, k); !err.ok()) return err;
+         if (auto err = detail::to_mdb_val(value, v); !err.ok()) return err;
+         error_t rc = mdb_cursor_get(cursor_, &k, &v, op);
+         if (!rc.ok()) return rc;
+         if (auto err = detail::from_mdb_val(k, key); !err.ok()) return err;
+         return detail::from_mdb_val(v, value);
+      }
+
+      // put(key, value, flags...)
+      // Stores a key/data pair into the database at the current cursor position.
+      //
+      // This function inserts or updates a record at the cursor using the provided key
+      // and value. It supports optional variadic LMDB put flags to control insert behavior,
+      // and accepts any SerializableLike-compatible types.
+      //
+      // Parameters:
+      // - key    : The key to store (must be unique unless using MDB_DUPSORT)
+      // - value  : The value to store under the key
+      // - flags  : Optional variadic list of LMDB put flags (see below)
+      //
+      // Supported LMDB put flags:
+      // - MDB_NOOVERWRITE : Do not overwrite an existing key. If the key exists,
+      //                     the function returns MDB_KEYEXIST and 'value' will be set
+      //                     to the existing data.
+      // - MDB_NODUPDATA   : For DUPSORT databases, prevent duplicate key+value pairs.
+      //                     Returns MDB_KEYEXIST if the pair already exists.
+      // - MDB_CURRENT     : Overwrite the record at the cursor's current position.
+      //                     The key must still match. Useful for in-place updates.
+      // - MDB_RESERVE     : Reserve space for the value without copying data.
+      //                     The pointer to reserved memory is returned in 'value.mv_data'.
+      //                     The caller must fill the data before the transaction ends.
+      // - MDB_APPEND      : Append the record assuming keys are in sorted order.
+      //                     Faster bulk-insert for sorted data. Returns MDB_KEYEXIST if out of order.
+      // - MDB_APPENDDUP   : Append a duplicate value assuming both key and value are in order.
+      //                     Only valid for DUPSORT databases.
+      // - MDB_MULTIPLE    : Insert multiple contiguous data items at once.
+      //                     Only valid for DUPFIXED databases.
+      //                     'value' must be an array of 2 MDB_vals:
+      //                       - First: mv_data points to data array, mv_size = element size
+      //                       - Second: mv_size = count of elements, mv_data is unused
+      //
+      // Returns:
+      // - MDB_SUCCESS on successful insert/update
+      // - MDB_KEYEXIST if duplicate constraints are violated
+      // - MDB_BAD_TXN if the cursor or transaction is invalid
+      // - Any other LMDB error from mdb_cursor_put
+      template<detail::SerializableLike KeyT, detail::SerializableLike ValueT, typename... Flags>
+      [[nodiscard]] error_t put(const KeyT& key, const ValueT& value, Flags... flags) noexcept 
+      {
+         if (!cursor_) return error_t(MDB_BAD_TXN);
+         unsigned int flg = (0 | ... | flags);
+
+         MDB_val k, v;
+         if (auto err = detail::to_mdb_val(key, k); !err.ok()) return err;
+         if (auto err = detail::to_mdb_val(value, v); !err.ok()) return err;
+         return error_t(mdb_cursor_put(cursor_, &k, &v, flg));
+      }
+
+      // del(key)
+      // Deletes the current key and all associated values from the database.
+      //
+      // This function positions the cursor at the specified key and removes it.
+      // If the database was opened with MDB_DUPSORT, all duplicate values associated
+      // with the key will also be deleted.
+      //
+      // Parameters:
+      // - key : The key to delete from the database
+      //
+      // Behavior:
+      // - Uses MDB_SET to position the cursor at the key
+      // - Calls mdb_cursor_del() to delete the entry at the current position
+      //
+      // Returns:
+      // - MDB_SUCCESS on success
+      // - MDB_NOTFOUND if the key does not exist
+      // - MDB_BAD_TXN if the cursor or transaction is invalid
+      // - Any other LMDB error from mdb_cursor_get or mdb_cursor_del
+      template<detail::SerializableLike KeyT>
+      [[nodiscard]] error_t del(const KeyT& key) noexcept 
+      {
+         if (!cursor_) return error_t(MDB_BAD_TXN);
+         MDB_val k;
+         if (auto err = detail::to_mdb_val(key, k); !err.ok()) return err;
+         MDB_val dummy;
+         return error_t(mdb_cursor_get(cursor_, &k, &dummy, MDB_SET))
+            | error_t(mdb_cursor_del(cursor_, 0));
+      }
+
+      // del(key, value)
+      // Deletes a specific key/value pair from the database.
+      //
+      // This function positions the cursor at the exact key and value combination
+      // and removes only that specific entry. It is primarily used with databases
+      // opened with the MDB_DUPSORT flag where duplicate values are allowed.
+      //
+      // Parameters:
+      // - key   : The key to locate
+      // - value : The specific value associated with the key to delete
+      //
+      // Behavior:
+      // - Uses MDB_GET_BOTH to position the cursor at the exact key/value pair
+      // - Calls mdb_cursor_del() to delete the item at the current cursor position
+      //
+      // Returns:
+      // - MDB_SUCCESS on successful deletion
+      // - MDB_NOTFOUND if the key/value pair does not exist
+      // - MDB_BAD_TXN if the cursor or transaction is invalid
+      // - Any other LMDB error from mdb_cursor_get or mdb_cursor_del
+      template<detail::SerializableLike KeyT, detail::SerializableLike ValueT>
+      [[nodiscard]] error_t del(const KeyT& key, const ValueT& value) noexcept 
+      {
+         if (!cursor_) return error_t(MDB_BAD_TXN);
+         MDB_val k, v;
+         if (auto err = detail::to_mdb_val(key, k); !err.ok()) return err;
+         if (auto err = detail::to_mdb_val(value, v); !err.ok()) return err;
+         return error_t(mdb_cursor_get(cursor_, &k, &v, MDB_GET_BOTH)) 
+            | error_t(mdb_cursor_del(cursor_, 0));
+      }
+
+      // del_all_dups()
+      // Deletes all duplicate values for the current key at the cursor position.
+      //
+      // This function removes all entries that share the current key when the database
+      // has been opened with the MDB_DUPSORT flag. It is equivalent to erasing all
+      // duplicates in a duplicate set.
+      //
+      // Behavior:
+      // - The cursor must already be positioned at the desired key
+      // - Calls mdb_cursor_del() with the MDB_NODUPDATA flag to remove all values
+      //   associated with the current key
+      //
+      // Returns:
+      // - MDB_SUCCESS on success
+      // - MDB_BAD_TXN if the cursor is not valid or not positioned
+      // - Any LMDB error returned by mdb_cursor_del
+      [[nodiscard]] error_t del_all_dups() noexcept
+      {
+         if (!cursor_) return error_t(MDB_BAD_TXN);
+         return error_t(mdb_cursor_del(cursor_, MDB_NODUPDATA));
       }
    };
 
